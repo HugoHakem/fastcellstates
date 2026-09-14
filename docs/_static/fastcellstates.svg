@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="2207"
+   height="441.3956"
+   viewBox="-22 105 2207 441.3956"
+   role="img"
+   aria-labelledby="title desc"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="fastcellstates.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <defs
+     id="defs1" />
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.34432188"
+     inkscape:cx="885.79907"
+     inkscape:cy="426.92611"
+     inkscape:window-width="1512"
+     inkscape:window-height="921"
+     inkscape:window-x="0"
+     inkscape:window-y="30"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg1" />
+  <title
+     id="title">fastcellstates</title>
+  <desc
+     id="desc">A navy cell outline containing four coloured gene-expression bars, beside the fastcellstates wordmark. All artwork is editable vector geometry; no fonts or raster images are required.</desc>
+  <g
+     id="cell-icon"
+     transform="translate(-50.728571,-48.09783)">
+    <path
+       id="cell-membrane"
+       fill="#153471"
+       fill-rule="evenodd"
+       d="m 351.46,153.22 c 30,-1.12 61.15,5.31 83.04,25.54 9.46,8.75 17.19,20.07 26,29.69 8.88,9.68 18.85,17.64 30,24.24 11.6,6.87 24.48,12.26 35.46,20.18 10.45,7.54 19.17,17.37 26.06,28.2 16.56,26.04 22.59,57.91 21.41,88.9 -4.31,113.01 -104.51,214.24 -216.46,223.78 -31.82,2.71 -64.58,-1.98 -94.13,-14.22 -24.47,-10.14 -46.74,-25.46 -65.6,-44.24 -18.79,-18.71 -34.2,-40.86 -44.7,-65.13 -12.64,-29.2 -18.17,-61.47 -16.53,-93.06 2.91,-56.27 28.58,-110.39 67.85,-151.89 38.93,-41.14 91.24,-69.88 147.6,-71.99 z m -5.11,33.8 c -46.93,4.78 -89.86,30.22 -121.66,65.03 -15.21,16.65 -27.88,35.43 -37.44,55.77 -10.98,23.35 -17.86,48.75 -18.65,74.32 -1.51,48.68 19.04,98.02 54.67,131.93 16.42,15.63 36.03,27.98 57.22,35.88 25.88,9.66 54.1,12.68 81.32,9.29 46.42,-5.78 89.93,-30.22 122.43,-64.61 33.34,-35.27 55.09,-81.01 56.05,-129.64 0.52,-25.92 -4.88,-52.67 -21.38,-72.14 -3.64,-4.29 -7.83,-8.24 -12.41,-11.63 -4.52,-3.33 -9.42,-6.14 -14.39,-8.77 -10.07,-5.32 -20.44,-9.93 -29.93,-16.08 -9.27,-6 -17.7,-13.47 -24.96,-21.94 -3.54,-4.13 -6.8,-8.49 -10.07,-12.84 -3.35,-4.46 -6.72,-8.9 -10.53,-12.89 -7.95,-8.31 -17.86,-14.62 -28.62,-18.25 -13.15,-4.44 -27.58,-4.87 -41.65,-3.43 z" />
+    <g
+       id="expression-bars">
+      <rect
+         id="gene-1"
+         x="219"
+         y="335"
+         width="54"
+         height="143"
+         rx="23"
+         fill="#0bb4b0" />
+      <rect
+         id="gene-2"
+         x="289"
+         y="262"
+         width="55"
+         height="216"
+         rx="23"
+         fill="#625ef0" />
+      <rect
+         id="gene-3"
+         x="360"
+         y="380"
+         width="54"
+         height="98"
+         rx="22"
+         fill="#ff686e" />
+      <rect
+         id="gene-4"
+         x="430"
+         y="321"
+         width="54"
+         height="157"
+         rx="23"
+         fill="#0bb4b0" />
+    </g>
+  </g>
+  <text
+     xml:space="preserve"
+     style="font-weight:bold;font-size:41.3333px;line-height:0;font-family:Charter;-inkscape-font-specification:'Charter, Bold';letter-spacing:0px;writing-mode:lr-tb;direction:ltr;white-space:pre;inline-size:460.179;display:inline;fill:#112f68;fill-opacity:1;stroke:#223038;stroke-width:0;stroke-linejoin:bevel;stroke-dasharray:none;paint-order:stroke fill markers"
+     x="677.24554"
+     y="190.04039"
+     id="text1"
+     transform="matrix(3.4339075,0,0,3.9259829,-1759.0421,-341.92904)"
+     inkscape:label="wordmark"><tspan
+       x="677.24554"
+       y="190.04039"
+       id="tspan3"><tspan
+         style="font-weight:normal;font-size:53.3333px;line-height:1;font-family:sans-serif;-inkscape-font-specification:sans-serif"
+         id="tspan1">fast</tspan><tspan
+         style="font-size:53.3333px;font-family:sans-serif;-inkscape-font-specification:sans-serif"
+         id="tspan2">cellstates</tspan></tspan></text>
+  <metadata
+     id="metadata1">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>fastcellstates</dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+</svg>

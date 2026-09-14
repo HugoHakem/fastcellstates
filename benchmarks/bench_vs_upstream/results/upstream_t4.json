@@ -1,0 +1,10 @@
+{
+  "tool": "cellstates (upstream)",
+  "config": "threads=4",
+  "n_states": 706,
+  "theta": 8192.0,
+  "log_likelihood": -43367964.53713557,
+  "seconds": 2776.538204556331,
+  "peak_rss_mb": 2825.8515625,
+  "threads": 4
+}

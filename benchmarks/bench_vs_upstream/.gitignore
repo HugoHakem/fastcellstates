@@ -1,0 +1,7 @@
+# raw intermediate data only; results/*.json (small, human-readable) is tracked
+_data/
+
+# byte-identical to the run's own .json (each script prints its result to
+# stdout, which this is just a capture of), and the filename embeds a
+# volatile SLURM job id that's different on every rerun: local-only.
+results/slurm-*.out

@@ -1,0 +1,9 @@
+{
+  "tool": "fastcellstates",
+  "config": "exact",
+  "n_states": 345,
+  "theta": 16384.0,
+  "log_likelihood": -43366848.590950474,
+  "seconds": 1043.0151194110513,
+  "peak_rss_mb": 782.13671875
+}

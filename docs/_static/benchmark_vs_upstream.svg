@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="958" height="300" viewBox="0 0 958 300" font-family="Menlo, Consolas, monospace" font-size="13">
+<rect width="958" height="300" fill="#ffffff"/>
+<text x="20" y="37.120000000000005" font-weight="700" fill="#111"></text>
+<text x="320" y="37.120000000000005" font-weight="700" fill="#111">states</text>
+<text x="410" y="37.120000000000005" font-weight="700" fill="#111">Θ</text>
+<text x="500" y="37.120000000000005" font-weight="700" fill="#111">time</text>
+<text x="610" y="37.120000000000005" font-weight="700" fill="#111">peak RAM</text>
+<text x="780" y="37.120000000000005" font-weight="700" fill="#111">log-likelihood</text>
+<line x1="14" y1="48" x2="944" y2="48" stroke="#333" stroke-width="1.5"/>
+<text x="20" y="71.12" font-weight="400" fill="#111">cellstates (upstream) (threads=1)</text>
+<text x="320" y="71.12" font-weight="400" fill="#111">706</text>
+<text x="410" y="71.12" font-weight="400" fill="#111">8,192</text>
+<text x="500" y="71.12" font-weight="400" fill="#111">141.6 min</text>
+<text x="610" y="71.12" font-weight="400" fill="#111">2,822 MB</text>
+<text x="780" y="71.12" font-weight="400" fill="#111">-43,367,930</text>
+<rect x="14" y="82" width="930" height="34" fill="#f6f6f6"/>
+<text x="20" y="105.12" font-weight="400" fill="#111">cellstates (upstream) (threads=4)</text>
+<text x="320" y="105.12" font-weight="400" fill="#111">706</text>
+<text x="410" y="105.12" font-weight="400" fill="#111">8,192</text>
+<text x="500" y="105.12" font-weight="400" fill="#111">46.3 min</text>
+<text x="610" y="105.12" font-weight="400" fill="#111">2,826 MB</text>
+<text x="780" y="105.12" font-weight="400" fill="#111">-43,367,965</text>
+<text x="20" y="139.12" font-weight="400" fill="#111">cellstates (upstream) (threads=8)</text>
+<text x="320" y="139.12" font-weight="400" fill="#111">706</text>
+<text x="410" y="139.12" font-weight="400" fill="#111">8,192</text>
+<text x="500" y="139.12" font-weight="400" fill="#111">54.2 min</text>
+<text x="610" y="139.12" font-weight="400" fill="#111">2,826 MB</text>
+<text x="780" y="139.12" font-weight="400" fill="#111">-43,367,960</text>
+<rect x="14" y="150" width="930" height="34" fill="#f6f6f6"/>
+<text x="20" y="173.12" font-weight="400" fill="#111">cellstates (upstream) (threads=16)</text>
+<text x="320" y="173.12" font-weight="400" fill="#111">706</text>
+<text x="410" y="173.12" font-weight="400" fill="#111">8,192</text>
+<text x="500" y="173.12" font-weight="400" fill="#111">118.6 min</text>
+<text x="610" y="173.12" font-weight="400" fill="#111">2,826 MB</text>
+<text x="780" y="173.12" font-weight="400" fill="#111">-43,367,971</text>
+<text x="20" y="207.12" font-weight="400" fill="#111">fastcellstates (exact)</text>
+<text x="320" y="207.12" font-weight="400" fill="#111">345</text>
+<text x="410" y="207.12" font-weight="400" fill="#111">16,384</text>
+<text x="500" y="207.12" font-weight="400" fill="#111">17.4 min</text>
+<text x="610" y="207.12" font-weight="400" fill="#111">782 MB</text>
+<text x="780" y="207.12" font-weight="400" fill="#111">-43,366,849</text>
+<rect x="14" y="218" width="930" height="34" fill="#f6f6f6"/>
+<text x="20" y="241.12" font-weight="400" fill="#111">fastcellstates (fast)</text>
+<text x="320" y="241.12" font-weight="400" fill="#111">26</text>
+<text x="410" y="241.12" font-weight="400" fill="#111">38,593</text>
+<text x="500" y="241.12" font-weight="400" fill="#111">7 s</text>
+<text x="610" y="241.12" font-weight="400" fill="#111">1,150 MB</text>
+<text x="780" y="241.12" font-weight="400" fill="#111">-43,383,549</text>
+<text x="20" y="275.12" font-weight="400" fill="#111">fastcellstates (fast_res1)</text>
+<text x="320" y="275.12" font-weight="400" fill="#111">635</text>
+<text x="410" y="275.12" font-weight="400" fill="#111">9,589</text>
+<text x="500" y="275.12" font-weight="400" fill="#111">107 s</text>
+<text x="610" y="275.12" font-weight="400" fill="#111">1,348 MB</text>
+<text x="780" y="275.12" font-weight="700" fill="#0a7d2e">-43,366,715</text>
+<line x1="14" y1="286" x2="944" y2="286" stroke="#ccc" stroke-width="1"/>
+</svg>

@@ -1,0 +1,33 @@
+# --- editor / OS ---
+.DS_Store
+.vscode/
+.idea/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- pixi ---
+.pixi/
+# NOTE: pixi.lock IS committed on purpose (reproducible env) -- do not ignore it.
+
+# --- local notes / scratch ---
+# docs/*.md and docs/notebooks/*.ipynb are tracked; the paper copies are not,
+# nor is scanpy's download cache or the save/load demo's own output from
+# re-running the notebooks.
+docs/papers/
+docs/notebooks/data/
+docs/notebooks/*.npz
+.bench/
+
+# scanpy's sc.datasets.* cache directory, wherever it lands (repo root if a
+# script is run from there, e.g. one of the benchmarks/ scripts)
+/data/
+

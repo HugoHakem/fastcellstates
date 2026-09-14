@@ -1,0 +1,53 @@
+cff-version: 1.2.0
+message: >-
+  If you use fastcellstates, please cite the original method paper (listed under
+  "preferred-citation"). Citing this reimplementation as well is appreciated.
+title: fastcellstates
+abstract: >-
+  A numba reimplementation of cellstates (Grobecker & van Nimwegen): Bayesian
+  Dirichlet-multinomial clustering of scRNA-seq UMI counts into gene-expression
+  states at statistically maximal resolution, with an optional Leiden warm start
+  and a compact generative summary.
+type: software
+license: MIT
+version: 0.2.0
+authors:
+  - family-names: Hakem
+    given-names: Hugo
+    email: hakem@ebi.ac.uk
+# repository-code: add the fork's URL once it is published
+
+preferred-citation:
+  type: article
+  title: >-
+    Identifying cell states in single-cell RNA-seq data at statistically maximal
+    resolution
+  authors:
+    - family-names: Grobecker
+      given-names: Pascal
+    - family-names: Sakoparnig
+      given-names: Thomas
+    - family-names: Nimwegen
+      name-particle: van
+      given-names: Erik
+  journal: PLOS Computational Biology
+  year: 2024
+  month: 7
+  volume: 20
+  issue: 7
+  doi: 10.1371/journal.pcbi.1012224
+  url: https://doi.org/10.1371/journal.pcbi.1012224
+  notes: Article e1012224.
+
+references:
+  - type: software
+    title: cellstates
+    notes: The original implementation that this package reimplements.
+    authors:
+      - family-names: Grobecker
+        given-names: Pascal
+      - family-names: Nimwegen
+        name-particle: van
+        given-names: Erik
+    license: MIT
+    repository-code: https://github.com/nimwegenLab/cellstates
