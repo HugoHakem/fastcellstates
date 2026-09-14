@@ -152,8 +152,38 @@ use). Result, same `K_fit=700`, `gamma=5.0`, one seed, 10,000 steps:
 
 A small, real improvement (~6% of the gap to the resolution=1.0 baseline
 closed), not a game-changer -- consistent with (4) being a real but minor
-factor, not the dominant one. (1) and (2) remain the more likely dominant
-causes and are still untested; the natural next experiment is still the one
-proposed earlier -- take Pyro's hard labels and run them through the
-package's own merge step, to see how much of the remaining gap is "bad raw
-partition" vs. "needs the cleanup every warm start needs."
+factor, not the dominant one.
+
+### The merge/sweep experiment: (2) was most of it
+
+`merge_pyro_labels.py` (pixi env, real `fastcellstates`) takes the
+Theta-co-adapted Pyro fit's raw hard labels (`pyro_fit.npz`) and runs them
+through the actual pipeline polish: `Cluster._merge_clusters_optimally()`
+then `moves.run_sweep` -- the exact same two steps `fast`/`exact` apply
+after *their own* warm start (`pipeline.py`). (Also doubles as a check on
+`dm_total_loglik`: `Cluster.total_likelihood` on the raw import matched the
+pyro venv's own hand-computed number to the decimal, -43,570,660.9 both
+ways.)
+
+| | states | log-likelihood | gap to res=1.0 baseline |
+|---|---|---|---|
+| pyro, raw | 497 | -43,570,660.9 | -203,946.1 |
+| pyro + merge | 223 | -43,501,654.4 | -134,939.6 |
+| pyro + merge + sweep | 268 | -43,380,149.0 | **-13,434.2** |
+| baseline (`fast`, res=1.0) | 635 | -43,366,714.8 | -- |
+| baseline (`fast`, default) | 26 | -43,383,548.6 | -- |
+
+Merge alone closes ~34% of the gap; merge+sweep closes ~93%, landing within
+0.03% of the tuned baseline's log-likelihood -- and actually *beats* the
+cheap default `fast` preset's -43,383,548.6, by 3,399.6, using 268 states
+vs. its 26. So (2) (no discrete merge/reassignment mechanism) was most of
+the story: the raw SVI partition wasn't fundamentally bad, it just needed
+the exact same cleanup every warm start (Leiden included) already gets.
+
+Caveats before reading too much into this: the merge/sweep step is cheap on
+top of an already-expensive fit (Pyro itself: ~137s vs. the cheap
+baseline's 4.5s -- the win above is quality, not cost, and total cost is
+still ~30x the cheap baseline's); one seed; and this doesn't yet show SVI
+adds anything Leiden doesn't -- it shows SVI's output, once handed to the
+existing polish, is *roughly as good a starting point* as Leiden's. Whether
+it's ever a *better* one (worth the extra ~130s) is still untested.

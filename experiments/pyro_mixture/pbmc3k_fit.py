@@ -165,6 +165,10 @@ def main():
     print(f"LL gap (pyro - baseline): {pyro_ll - float(base['log_likelihood']):.1f}")
     print(f"ARI vs baseline labels: {ari:.3f}")
 
+    out = "experiments/pyro_mixture/pyro_fit.npz"
+    np.savez(out, labels=labels, theta=fitted_theta, log_likelihood=pyro_ll, n_states=n_live, seconds=dt)
+    print(f"wrote {out}")
+
 
 if __name__ == "__main__":
     main()
