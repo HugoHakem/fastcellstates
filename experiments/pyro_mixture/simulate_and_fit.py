@@ -30,7 +30,9 @@ from pyro.optim import Adam
 from sklearn.metrics import adjusted_rand_score
 from torch.distributions import constraints
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.set_default_dtype(torch.float64)
+torch.set_default_device(DEVICE)  # tensors pyro/torch create internally (Beta(1.0, gamma) etc.) follow this too
 
 
 def simulate(K_true=4, G=50, N=500, theta_scale=20.0, seed=0):
@@ -94,8 +96,8 @@ def guide(x, theta, k, gamma=None):
 def fit(x, theta, k, gamma=None, n_steps=2000, lr=0.05, seed=0, name=""):
     pyro.clear_param_store()
     pyro.set_rng_seed(seed)
-    x_t = torch.as_tensor(x)
-    theta_t = torch.as_tensor(theta)
+    x_t = torch.as_tensor(x, device=DEVICE)
+    theta_t = torch.as_tensor(theta, device=DEVICE)
     svi = SVI(model, guide, Adam({"lr": lr}), loss=TraceEnum_ELBO(max_plate_nesting=1))
     losses = []
     for step in range(n_steps):
@@ -116,15 +118,15 @@ def posterior_pi(_k, gamma):
 
 
 def posterior_labels(x, k, gamma):
-    x_t = torch.as_tensor(x)
+    x_t = torch.as_tensor(x, device=DEVICE)
     pi_mean = posterior_pi(k, gamma)
     tau_alpha = pyro.param("tau_alpha").detach()
     alpha_mean = tau_alpha / tau_alpha.sum(-1, keepdim=True)  # (k, G)
     log_joint = torch.log(pi_mean).unsqueeze(1) + (
         x_t.unsqueeze(0) * torch.log(alpha_mean).unsqueeze(1)
     ).sum(-1)  # (k, N)
-    labels = log_joint.argmax(0).numpy()
-    return labels, pi_mean.numpy()
+    labels = log_joint.argmax(0).cpu().numpy()
+    return labels, pi_mean.cpu().numpy()
 
 
 def run(name, x, theta, k, z_true, gamma=None, **fit_kwargs):
@@ -145,6 +147,7 @@ def main():
     k_true, g, n = 4, 50, 500
     k_fit = 8  # deliberately over-truncated
     x, _n_c, z_true, theta = simulate(K_true=k_true, G=g, N=n)
+    print(f"device: {DEVICE}")
     print(f"simulated N={n} cells, G={g} genes, K_true={k_true}; fitting K={k_fit}\n")
 
     dirichlet = run("dirichlet-pi", x, theta, k_fit, z_true, gamma=None)

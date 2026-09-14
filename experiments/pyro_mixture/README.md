@@ -16,6 +16,19 @@ uv pip install --python .venv-pyro/bin/python pyro-ppl scikit-learn
 .venv-pyro/bin/python simulate_and_fit.py
 ```
 
+`pip install pyro-ppl` pulls in whatever the currently-latest `torch` build is
+(here: `+cu130`), which may not match this node's driver -- check
+`nvidia-smi`'s "CUDA Version" and reinstall `torch` from the matching
+PyTorch wheel index if `torch.cuda.is_available()` comes back `False`:
+
+```sh
+uv pip install --python .venv-pyro/bin/python --index-url https://download.pytorch.org/whl/cu128 "torch==2.11.0"
+```
+
+(`cu128` here because this node's driver reports CUDA 12.8; pick the index
+matching whatever `nvidia-smi` reports elsewhere.) The script itself picks
+up `cuda` automatically via `torch.cuda.is_available()` -- no separate flag.
+
 ## Status
 
 `simulate_and_fit.py`: generates data from the exact model this is meant to
@@ -43,3 +56,10 @@ Next things worth actually varying before trusting this: seed/init
 sensitivity for both variants (is the flat-Dirichlet merge, and the
 stick-breaking clean recovery, each a fluke of one run or systematic?),
 sensitivity to `gamma` and to `K_fit`, and only then real data.
+
+GPU verified working (H200, `torch==2.11.0+cu128`): the script picks up
+`cuda` automatically, ran end to end, matches a raw matmul smoke test. At
+this synthetic problem's tiny size (N=500, G=50, K=8) it's actually slower
+than CPU (~10s vs ~6s, kernel-launch overhead dominates) -- expected, and
+irrelevant until the real-data / scaling step above, which is where a GPU
+would actually matter.
