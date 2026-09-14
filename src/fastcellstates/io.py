@@ -16,10 +16,12 @@ cluster whole: fit a ``Summary`` on a subsample (``read_h5ad_subset``), then
 see ``docs/notebooks/large_datasets.ipynb``.
 """
 
+from typing import cast
+
 import numpy as np
 import scipy.sparse as sp
 
-from ._types import Counts
+from ._types import Counts, Sparse
 
 _Names = np.ndarray | None
 
@@ -61,7 +63,10 @@ def _to_int(data: Counts) -> Counts:
         m = sp.csc_matrix(data)
         if np.issubdtype(m.dtype, np.floating):
             m.data = np.rint(m.data)
-        return m.astype(np.int64)
+        # cast: .astype() is defined on scipy's private internal base
+        # class; newer stubs don't rebind its `Self` through a Union
+        # receiver, so pyright infers the base class instead
+        return cast(Sparse, m.astype(np.int64))
     a = np.asarray(data)
     if np.issubdtype(a.dtype, np.floating):
         a = np.rint(a)
@@ -89,7 +94,9 @@ def read(paths, gene_mask_zero=False):
         cells.append(c if c is not None else np.array([f"{p}-cell_{i}" for i in range(n)]))
 
     if any(sp.issparse(d) for d in datas):
-        counts: Counts = sp.hstack([sp.csc_matrix(d) for d in datas], format="csc")
+        # cast: newer scipy stubs infer hstack's element type as its
+        # private internal base class rather than a concrete subclass
+        counts: Counts = cast(Sparse, sp.hstack([sp.csc_matrix(d) for d in datas], format="csc"))
     else:
         counts = np.concatenate([np.asarray(d) for d in datas], axis=1)
     cell_names = np.concatenate(cells)

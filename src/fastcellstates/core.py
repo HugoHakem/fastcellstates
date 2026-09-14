@@ -14,10 +14,12 @@ strategies (MCMC, sweeps, merge, Theta) are separate modules that take a
 ``Cluster`` and mutate it.
 """
 
+from typing import cast
+
 import numpy as np
 import scipy.sparse as sp
 
-from ._types import Counts
+from ._types import Counts, Sparse
 from .model import _dm_kernels as _k
 
 
@@ -57,7 +59,10 @@ class Cluster:
     ):
         input_is_sparse = sp.issparse(d)
         if sp.issparse(d):
-            d = sp.csc_matrix(d).astype(np.int64, copy=False)
+            # cast: .astype() is defined on scipy's private internal base
+            # class; newer stubs don't rebind its `Self` through a Union
+            # receiver, so pyright infers the base class instead
+            d = cast(Sparse, sp.csc_matrix(d).astype(np.int64, copy=False))
             gene_totals = np.asarray(d.sum(axis=1), dtype=np.float64).ravel()
         else:
             d = np.ascontiguousarray(d)

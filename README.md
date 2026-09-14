@@ -2,6 +2,12 @@
   <img src="docs/_static/fastcellstates.svg" alt="fastcellstates" width="1000">
 </p>
 
+<p align="center">
+  <a href="https://github.com/HugoHakem/fastcellstates/actions/workflows/lint.yaml"><img src="https://github.com/HugoHakem/fastcellstates/actions/workflows/lint.yaml/badge.svg" alt="Lint"></a>
+  <a href="https://github.com/HugoHakem/fastcellstates/actions/workflows/test.yaml"><img src="https://github.com/HugoHakem/fastcellstates/actions/workflows/test.yaml/badge.svg" alt="Test"></a>
+  <a href="https://github.com/HugoHakem/fastcellstates/actions/workflows/build.yaml"><img src="https://github.com/HugoHakem/fastcellstates/actions/workflows/build.yaml/badge.svg" alt="Check Build"></a>
+</p>
+
 `fastcellstates` is a numba reimplementation of [`cellstates`](https://github.com/nimwegenLab/cellstates).
 
 [`docs/changes.md`](docs/changes.md) covers what differs and why.
