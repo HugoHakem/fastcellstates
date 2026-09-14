@@ -119,3 +119,41 @@ So the least-tuned thing the package already does beats the Pyro fit on
 *both* axes at once: better log-likelihood, 24x fewer states, 28x less
 time. This isn't the resolution-tuned baseline making the comparison look
 unfairly hard -- the cheap default already dominates.
+
+### Why, and the cheap fix: letting Theta co-adapt
+
+Candidate explanations, roughly by expected impact: (1) no data-informed
+init -- every state starts at the same flat prior mean, `fast`/`exact` both
+start from a real partition (Leiden or singletons); (2) no discrete merge
+step -- the exact search explicitly merges any likelihood-improving pair,
+mean-field only prunes weak states indirectly through the stick-breaking
+prior's KL term, which plausibly explains ending up with far more live
+states than even the cheap baseline needs; (3) mean-field is a strictly
+weaker approximation than the exact search's direct (unfactorized)
+optimization of the true marginal; (4) Theta was pinned to the *baseline's*
+fitted value rather than allowed to adapt to Pyro's own (much worse)
+partition -- a real confound, since `exact`/`fast` themselves treat Theta
+and the partition as jointly fit; (5) plain Adam on Dirichlet/Beta
+concentration params is a weaker optimizer geometry than the natural
+gradients textbook CAVI would use for this exact conjugate family; (6)
+objective/scoring mismatch -- SVI maximises the ELBO, not the hard-partition
+score we read off afterward; (7) one seed, and mean-field mixtures are
+known to be highly multimodal.
+
+Fixed (4), the cheapest one: Theta is now a `pyro.param` point estimate,
+optimized jointly by the same SVI step instead of pinned to the baseline's
+value (phi stays fixed -- same free-scale-only treatment `exact`/`fast`
+use). Result, same `K_fit=700`, `gamma=5.0`, one seed, 10,000 steps:
+
+| | states | log-likelihood | Theta |
+|---|---|---|---|
+| pyro, Theta fixed | 484 | -43,583,619.0 | 10,568 (baseline's, pinned) |
+| pyro, Theta co-adapted | 497 | -43,570,660.9 | 9,589 -> 10,568 (converged) |
+
+A small, real improvement (~6% of the gap to the resolution=1.0 baseline
+closed), not a game-changer -- consistent with (4) being a real but minor
+factor, not the dominant one. (1) and (2) remain the more likely dominant
+causes and are still untested; the natural next experiment is still the one
+proposed earlier -- take Pyro's hard labels and run them through the
+package's own merge step, to see how much of the remaining gap is "bad raw
+partition" vs. "needs the cleanup every warm start needs."

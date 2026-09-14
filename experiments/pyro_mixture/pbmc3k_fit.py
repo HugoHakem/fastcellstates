@@ -18,12 +18,22 @@ Two things changed from simulate_and_fit.py, both necessary at this scale
 
 2. The score reported isn't ARI against a ground truth we don't have on
    real data -- it's the paper's own closed-form marginal log-likelihood
-   (eq. 15), evaluated at the *baseline's own fitted Theta, phi* on the
-   partition this script finds. `dm_total_loglik` below is a direct copy
-   of `fastcellstates.model.DirichletMultinomial.cluster_loglik`'s formula
-   (not imported: keeps this venv free of numba/fastcellstates as a
-   dependency). Comparable number, same units, same data, same Theta as
-   `baseline.npz` (see baseline.py, run separately under pixi).
+   (eq. 15), evaluated at *this fit's own* Theta (see below), phi from the
+   baseline, on the partition this script finds. `dm_total_loglik` below is
+   a direct copy of `fastcellstates.model.DirichletMultinomial.cluster_loglik`'s
+   formula (not imported: keeps this venv free of numba/fastcellstates as a
+   dependency).
+
+Theta co-adapts with the partition instead of being pinned to the
+baseline's own fitted value: phi stays fixed (the genome-wide profile,
+data-derived, not something either method treats as free), but Theta is a
+`pyro.param` -- a point estimate optimized jointly by the same SVI step,
+mirroring how `exact`/`fast` also just MLE-fit Theta rather than putting a
+full posterior on it (docs/changes.md's "Fitting Theta" section). Initialised
+at the baseline's own Theta, but free to move; the first version of this
+script fixed Theta to the baseline's value throughout, which meant scoring
+Pyro's partition at a Theta that was optimized for someone else's partition
+-- a real confound, not just an unfair comparison.
 """
 
 import time
@@ -53,12 +63,16 @@ def stick_breaking(v):
 
 
 @config_enumerate
-def model(x, theta, k, gamma):
+def model(x, phi, k, gamma, theta_init):
+    # Theta: a point estimate (pyro.param, no prior), jointly optimized by
+    # the same SVI step -- not fixed to the baseline's value.
+    theta = pyro.param("theta", torch.tensor(float(theta_init)), constraint=constraints.positive)
+    theta_vec = theta * phi  # (G,)
     with pyro.plate("sticks", k - 1):
         v = pyro.sample("v", dist.Beta(1.0, gamma))
     pi = stick_breaking(v)
     with pyro.plate("states", k):
-        alpha = pyro.sample("alpha", dist.Dirichlet(theta))
+        alpha = pyro.sample("alpha", dist.Dirichlet(theta_vec))
     log_alpha = torch.log(alpha)  # (k, G)
     loglik_table = x @ log_alpha.T  # (N, k), computed once -- not per enum branch
     with pyro.plate("cells", x.shape[0]):
@@ -66,28 +80,30 @@ def model(x, theta, k, gamma):
         pyro.factor("x", loglik_table.T)  # (k, N): already aligned with the enum axis
 
 
-def guide(x, theta, k, gamma):
+def guide(x, phi, k, gamma, theta_init):
     tau_a = pyro.param("tau_a", torch.ones(k - 1), constraint=constraints.positive)
     tau_b = pyro.param("tau_b", torch.full((k - 1,), float(gamma)), constraint=constraints.positive)
     with pyro.plate("sticks", k - 1):
         pyro.sample("v", dist.Beta(tau_a, tau_b))
     tau_alpha = pyro.param(
-        "tau_alpha", theta.expand(k, -1).clone(), constraint=constraints.positive
+        "tau_alpha", (float(theta_init) * phi).expand(k, -1).clone(), constraint=constraints.positive
     )
     with pyro.plate("states", k):
         pyro.sample("alpha", dist.Dirichlet(tau_alpha))
 
 
-def fit(x, theta, k, gamma, n_steps, lr=0.05, seed=0):
+def fit(x, phi, k, gamma, theta_init, n_steps, lr=0.05, seed=0):
     pyro.clear_param_store()
     pyro.set_rng_seed(seed)
     svi = SVI(model, guide, Adam({"lr": lr}), loss=TraceEnum_ELBO(max_plate_nesting=1))
     t_step = time.perf_counter()
     for step in range(n_steps):
-        loss = svi.step(x, theta, k, gamma)
+        loss = svi.step(x, phi, k, gamma, theta_init)
         if step % 1000 == 0:
             dt = time.perf_counter() - t_step
-            print(f"  step {step:5d}  elbo loss {loss:.1f}  ({dt / max(step, 1) * 100:.2f}s/100steps)")
+            theta_now = pyro.param("theta").item()
+            print(f"  step {step:5d}  elbo loss {loss:.1f}  theta {theta_now:.1f}"
+                  f"  ({dt / max(step, 1) * 100:.2f}s/100steps)")
 
 
 def posterior_labels(x, k):
@@ -126,22 +142,24 @@ def main():
           f"{float(base['seconds']):.1f}s\n")
 
     x_t = torch.as_tensor(counts_gN.T, device=DEVICE, dtype=torch.get_default_dtype())  # (N, G)
-    theta_t = torch.as_tensor(theta_scalar * lam, device=DEVICE)  # (G,), = Theta*phi
+    phi_t = torch.as_tensor(lam, device=DEVICE)  # (G,), fixed
 
     t0 = time.perf_counter()
-    fit(x_t, theta_t, k_fit, gamma=5.0, n_steps=10_000)
+    fit(x_t, phi_t, k_fit, gamma=5.0, theta_init=theta_scalar, n_steps=10_000)
     dt = time.perf_counter() - t0
 
+    fitted_theta = pyro.param("theta").item()
     labels = posterior_labels(x_t, k_fit)
     n_live = len(np.unique(labels))
 
     agg = np.zeros((k_fit, counts_gN.shape[0]))
     np.add.at(agg, labels, counts_gN.T)
-    pyro_ll = dm_total_loglik(theta_scalar, lam, agg)
+    pyro_ll = dm_total_loglik(fitted_theta, lam, agg)  # at pyro's *own* fitted Theta, not the baseline's
 
     ari = adjusted_rand_score(base["labels"], labels)
 
-    print(f"\npyro (stick-breaking): {n_live} states, LL={pyro_ll:.1f}, {dt:.1f}s")
+    print(f"\npyro (stick-breaking): {n_live} states, LL={pyro_ll:.1f}, {dt:.1f}s, "
+          f"theta {theta_scalar:.1f} -> {fitted_theta:.1f}")
     print(f"baseline (fast, res=1.0): {int(base['n_states'])} states, LL={float(base['log_likelihood']):.1f}, "
           f"{float(base['seconds']):.1f}s")
     print(f"LL gap (pyro - baseline): {pyro_ll - float(base['log_likelihood']):.1f}")
