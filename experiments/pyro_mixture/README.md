@@ -20,15 +20,26 @@ uv pip install --python .venv-pyro/bin/python pyro-ppl scikit-learn
 
 `simulate_and_fit.py`: generates data from the exact model this is meant to
 approximate (known `K_true`, `pi`, `alpha`, varying per-cell library size
-`N_c`), fits a finite-`K` (over-truncated, flat Dirichlet on `pi` — not the
-stick-breaking prior from the ideas note yet) mixture via enumeration + SVI,
-and reports ARI against the true labels plus which states end up "live".
-Simplest possible check: does the inference procedure itself recover known
-clusters at all, before testing anything on real data or adding the DP prior.
+`N_c`), fits a finite-`K` (over-truncated) mixture via enumeration + SVI
+under either prior on `pi` — flat `Dirichlet(1)`, or the truncated
+stick-breaking prior from the ideas note (`v_k ~ Beta(1, gamma)`, `gamma`
+fixed, still the open dial the ideas note flags) — and reports ARI against
+the true labels plus which states end up "live". Simplest possible check:
+does the inference procedure itself recover known clusters at all, before
+testing anything on real data.
 
-First run (`K_true=4`, `G=50`, `N=500`, `K_fit=8`, 2000 SVI steps, default
-seed): ~8s on CPU, 3/4 true states end up "live" (one absorbed into another),
-ARI 0.86 against the true labels. So the enumeration + SVI machinery does
-work end to end — next things to actually vary: seed/init sensitivity (is
-the merged state a fluke of one run?), step count / learning rate, and only
-then the stick-breaking prior from the ideas note.
+First run, flat `Dirichlet(1)` on `pi` (`K_true=4`, `G=50`, `N=500`,
+`K_fit=8`, 2000 SVI steps, default seed): ~8s on CPU, 3/4 true states end up
+"live" (one absorbed into another), ARI 0.86.
+
+Second run, same dataset, stick-breaking prior with `gamma=1.0`: all 4 true
+states live, ARI 1.000, ~6s. One run each, so a data point rather than a
+trend, but it's the direction the ideas note's reasoning predicted — a prior
+biased toward few occupied components should make it easier for unused
+truncation slots to actually collapse to ~0 weight instead of splitting mass
+across them.
+
+Next things worth actually varying before trusting this: seed/init
+sensitivity for both variants (is the flat-Dirichlet merge, and the
+stick-breaking clean recovery, each a fluke of one run or systematic?),
+sensitivity to `gamma` and to `K_fit`, and only then real data.
