@@ -104,3 +104,18 @@ result that isn't favourable, and it's the one that matters more than the
 synthetic checks: recovering your own generative model's synthetic data is
 the easy case, beating (or even matching) the existing search on real data
 is the actual bar.
+
+Checked against the *cheapest* baseline too, not just the tuned one: the
+plain `fast` preset (default resolution, no override) gets 26 states,
+LL=-43,383,548.6, in 4.5s.
+
+| | states | log-likelihood | time |
+|---|---|---|---|
+| `fast` (default) | 26 | -43,383,548.6 | 4.5s |
+| pyro (stick-breaking) | 484 | -43,583,619.0 | 127.2s |
+| `fast` (resolution=1.0) | 635 | -43,366,714.8 | 69.0s |
+
+So the least-tuned thing the package already does beats the Pyro fit on
+*both* axes at once: better log-likelihood, 24x fewer states, 28x less
+time. This isn't the resolution-tuned baseline making the comparison look
+unfairly hard -- the cheap default already dominates.
