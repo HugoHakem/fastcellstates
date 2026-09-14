@@ -61,5 +61,46 @@ GPU verified working (H200, `torch==2.11.0+cu128`): the script picks up
 `cuda` automatically, ran end to end, matches a raw matmul smoke test. At
 this synthetic problem's tiny size (N=500, G=50, K=8) it's actually slower
 than CPU (~10s vs ~6s, kernel-launch overhead dominates) -- expected, and
-irrelevant until the real-data / scaling step above, which is where a GPU
-would actually matter.
+irrelevant until the real-data / scaling step below, which is where a GPU
+actually matters.
+
+## Real data: pbmc3k
+
+`baseline.py` (run under `pixi run python`, needs real `fastcellstates`) fits
+the same `pbmc3k` counts (`experiments/pyro_mixture/pbmc3k_counts.npy`, via
+`benchmarks/bench_vs_upstream/scripts/prepare_data.py`) with the `fast`
+preset at `resolution=1.0` -- per `docs/changes.md`, the strongest baseline
+available, beating even the original `cellstates`. Saves labels, `Theta`,
+`phi`, and the DM log-likelihood to `baseline.npz`.
+
+`pbmc3k_fit.py` (the isolated pyro venv) loads that, fits the
+stick-breaking mixture at the *same* `Theta*phi` prior, and scores its own
+hard partition with the identical eq. 15 formula
+(`fastcellstates.model.DirichletMultinomial.cluster_loglik`, copied by hand
+as `dm_total_loglik` rather than importing fastcellstates into this venv) --
+a genuine apples-to-apples number, not a proxy. At this scale (G=13,714,
+baseline finds 635/2,700 states live) the naive elementwise likelihood from
+the synthetic script would materialise a (K, N, G) tensor; rewritten as a
+single `(N,G) @ (G,K)` matmul computed once before the "cells" plate instead
+(see the module docstring for why this is exactly equivalent under Pyro's
+enumeration, not an approximation).
+
+Result (`K_fit=700`, `gamma=5.0`, one seed, 10,000 SVI steps -- ELBO had
+already plateaued by ~5,000, so this is a converged run, not an
+undertrained one):
+
+| | states | log-likelihood | time |
+|---|---|---|---|
+| baseline (`fast`, res=1.0) | 635 | -43,366,714.8 | 69.0s |
+| pyro (stick-breaking) | 484 | -43,583,619.0 | 127.2s (10k steps) |
+
+ARI between the two partitions: 0.33 (weak agreement). So on real data, at
+this one untuned configuration, the SVI fit converges to a genuinely worse
+optimum than the existing search -- about 0.5% lower log-likelihood, ~150
+fewer states, and a different partition, not just a relabeling of the same
+one. Not a proof against the idea (one `gamma`, one `K`, one seed, one
+learning rate, plain mean-field, all picked without tuning), but the first
+result that isn't favourable, and it's the one that matters more than the
+synthetic checks: recovering your own generative model's synthetic data is
+the easy case, beating (or even matching) the existing search on real data
+is the actual bar.
