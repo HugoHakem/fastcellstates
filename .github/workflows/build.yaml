@@ -1,0 +1,29 @@
+name: Check Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: "3.11"
+      # A plain pip + PEP 517 build, deliberately not through pixi: this
+      # checks the package as an actual downstream consumer would get it,
+      # not through the dev conda environment.
+      - name: Install build + twine
+        run: pip install build twine
+      - name: Build sdist + wheel
+        run: python -m build
+      - name: Check package metadata
+        run: twine check --strict dist/*

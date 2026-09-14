@@ -1,0 +1,85 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Re-resolves against whatever is on PyPI today (the python-versions and
+    # floors jobs below don't use a lockfile), so this actually catches
+    # upstream releases breaking us, not just a repeat of the last commit.
+    - cron: "0 5 1,15 * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast, fully reproducible regression check against the committed pixi.lock.
+  pixi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install pixi
+        uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          pixi-version: latest
+      - name: Run tests
+        run: pixi run test
+
+  # requires-python declares >=3.10; verify each supported version actually
+  # installs (via wheels, not a source build) and passes. Capped at 3.12: numpy
+  # only ships prebuilt 3.13 wheels from numpy>=2.1, and this repo's floor sits
+  # below that (see the floors job) -- add 3.13 once the floor moves past it.
+  python-versions:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: uv pip install --system -e . "pytest>=8"
+      - name: Run tests
+        run: pytest -q
+
+  # Install the *exact* lower bounds declared in [project.dependencies] and run
+  # the suite against them. Each floor below was empirically bisected (not
+  # guessed): `uv pip install --resolution lowest-direct` finds the lowest
+  # jointly-installable combination of the declared bounds, then the real
+  # failures it turned up (an alpha=0 Dirichlet draw rejected before
+  # numpy 1.25, two jsonargparse APIs not present before 4.49, a betainc
+  # precision difference before scipy 1.12, h5py/numpy having no floor at all
+  # before) were traced to the specific dependency and fixed by raising that
+  # one's floor to the first version that actually works -- not by guessing or
+  # bumping everything. Without this job the floors are unverifiable claims
+  # that drift out of date silently as the code changes.
+  floors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.11"
+      - name: Install at the declared floors
+        run: uv pip install --system --resolution lowest-direct -e . "pytest>=8"
+      - name: Run tests
+        run: pytest -q
+
+  # Single required status for branch protection instead of naming every
+  # matrix leg individually. See https://github.com/re-actors/alls-green#why.
+  check:
+    if: always()
+    needs: [pixi, python-versions, floors]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: re-actors/alls-green@v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}
