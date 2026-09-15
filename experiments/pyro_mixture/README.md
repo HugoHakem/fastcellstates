@@ -1,10 +1,10 @@
 # Pyro mixture experiment
 
-Scratch prototype for the idea in [`docs/ideas/pyro_dp_mixture.md`](../../docs/ideas/pyro_dp_mixture.md):
-fit the same generative model (Categorical/Dirichlet/Multinomial) with Pyro's
-SVI instead of the exact partition search. Deliberately not wired into
-`fastcellstates` — no shared code, no CLI, no `Summary` integration yet. Just
-checking the inference procedure itself works before anything else.
+Prototype for the idea in [`idea.md`](idea.md): fit the same generative
+model (Categorical/Dirichlet/Multinomial) with Pyro's SVI instead of the
+exact partition search. Deliberately not wired into `fastcellstates` -- no
+shared code, no CLI, no `Summary` integration yet. Just checking the
+inference procedure itself works before anything else.
 
 Isolated on purpose: `pyro-ppl` (+ `torch`) is not a project dependency and
 this doesn't use pixi's environment.
