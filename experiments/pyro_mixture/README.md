@@ -248,12 +248,34 @@ None of these four raw partitions are close to competitive yet, still worse
 than even the *flat*-init Adam run from before (gap -203,946.1) -- the
 singleton-heavy real-cell-init runs (B, D) sit at roughly 2,700 states, not
 meaningfully different from where they started; nothing here does the
-consolidation merge/sweep did before. That's the pending question: with
-~2,700 live states instead of ~500, does merge+sweep still close most of
-the gap, or does starting this fragmented change the answer? The merge
-step itself is answering that slowly -- `_merge_clusters_optimally()` from
-~500 states finished in seconds; from ~2,700 it's still running after
-30+ minutes (2000%+ CPU, so genuinely computing, not stuck -- likely a
-much-worse-than-linear cost in the *number* of starting clusters, not
-something the earlier ~500-state run exercised). Results pending; will
-update this section once it's back.
+consolidation merge/sweep did before.
+
+**Merge from ~2,700 starting states is far more expensive than from ~500**
+(seconds before; B's took ~20-25 minutes at 2000%+ CPU -- genuinely
+computing, not stuck, just a much-worse-than-linear cost in the number of
+starting clusters that the earlier ~500-state run never exercised).
+
+**And, once it finished: real-cell init does *worse* after merge+sweep than
+flat init did**, despite avoiding the collapse problem --
+
+| | states | log-likelihood | gap to res=1.0 baseline |
+|---|---|---|---|
+| B (real_cell, Adam), raw | 2,700 | -43,539,661.2 | -172,946.4 |
+| B + merge | 432 | -43,451,995.0 | -85,280.2 |
+| B + merge + sweep | 511 | -43,435,007.7 | **-68,292.9** |
+| *(for comparison)* flat-init Adam + merge + sweep | 268 | -43,380,149.0 | *-13,434.2* |
+
+Merge+sweep only closes ~61% of B's gap here, landing 5x further behind
+than the earlier flat-init run did. Reading: flat init wasn't just "a bad
+start Adam had to work around" -- the gradual, noisy training *from* a
+shared symmetric start was itself doing real organizing work, similar cells
+getting pulled toward shared states over thousands of SVI steps simply
+because states that already attract similar cells reinforce each other via
+the shared gradient signal. Real-cell init removes exactly that dynamic:
+every state starts already fitting its own anchor cell well, so there's
+little gradient pressure to reorganize anything, and the entire
+consolidation job is left to one static greedy merge pass over ~2,700
+near-arbitrary micro-clusters at once -- a harder job than consolidating an
+already-partially-organized ~500-state partition. Scoring the two CAVI
+real-cell runs (D-gradient, D-linesearch) the same way next, to see if this
+holds regardless of optimizer or is specific to Adam.
