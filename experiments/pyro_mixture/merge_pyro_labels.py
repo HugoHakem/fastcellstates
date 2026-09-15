@@ -8,8 +8,13 @@ Tests directly which story explains the gap to baseline.npz: "SVI's raw
 partition is bad" (merge barely helps) vs. "SVI's raw partition just needed
 the same cleanup every warm start needs" (merge closes most of the gap).
 
-    pixi run python experiments/pyro_mixture/merge_pyro_labels.py
+    pixi run python experiments/pyro_mixture/merge_pyro_labels.py [fit.npz]
+
+Defaults to pyro_fit.npz; pass another path (pyro_fit_B.npz, pyro_fit_C.npz,
+...) to score a different variant.
 """
+
+import sys
 
 import numpy as np
 import scipy.sparse as sp
@@ -18,13 +23,14 @@ import fastcellstates as fcs
 
 DATA = "experiments/pyro_mixture/pbmc3k_counts.npy"
 BASELINE = "experiments/pyro_mixture/baseline.npz"
-PYRO_FIT = "experiments/pyro_mixture/pyro_fit.npz"
 
 
 def main():
+    pyro_fit_path = sys.argv[1] if len(sys.argv) > 1 else "experiments/pyro_mixture/pyro_fit.npz"
     counts = sp.csc_matrix(np.load(DATA))
     base = np.load(BASELINE)
-    pyro = np.load(PYRO_FIT)
+    pyro = np.load(pyro_fit_path)
+    print(f"scoring {pyro_fit_path}")
 
     clst = fcs.Cluster(counts, l=float(pyro["theta"]), c=pyro["labels"].astype(np.int32))
 

@@ -187,3 +187,73 @@ still ~30x the cheap baseline's); one seed; and this doesn't yet show SVI
 adds anything Leiden doesn't -- it shows SVI's output, once handed to the
 existing polish, is *roughly as good a starting point* as Leiden's. Whether
 it's ever a *better* one (worth the extra ~130s) is still untested.
+
+### Singleton-style init, and closed-form CAVI instead of Adam
+
+Two follow-ups, agreed on before implementing (per the strategy discussion):
+(1) attack cause (1) -- flat init -- with a real analogue of the MCMC's
+singleton start: `K_fit = N = 2,700`, every state's `alpha_s` seeded from
+one real cell's own counts (`init_tau_alpha(..., mode="real_cell")` in
+`_common.py`, a straight bijection at `k == N`, no clustering algorithm
+involved). (2) attack cause (5) -- Adam's optimizer geometry -- with actual
+closed-form CAVI (`pbmc3k_cavi.py`): the model is fully conjugate (`z` was
+*already* handled exactly by enumeration in the Adam version too -- that
+doesn't change), so `alpha_s` and the stick weights `v_k` both have
+closed-form coordinate updates given digamma-based expected sufficient
+statistics (`E_q[log alpha]`, not `log(mean alpha)` -- the E-step
+correctness detail flagged in the strategy discussion), no Pyro/Adam
+needed. Theta gets the same two-way "try both" treatment: a few Adam steps
+on `log(Theta)` each round, or a Brent line search on the same closed-form
+objective each round (mirrors `fastcellstates.moves.log_search`'s approach
+to fitting Theta for the exact/fast presets).
+
+Four raw (pre-merge) runs, all `K_fit=2,700`, `gamma=5.0`:
+
+| | init | optimizer | states | log-likelihood | gap | time |
+|---|---|---|---|---|---|---|
+| B | real_cell | Adam | 2,700 | -43,539,661.2 | -172,946.4 | 957.0s |
+| C | flat | CAVI (gradient Theta) | 3 | -43,638,283.1 | -271,568.3 | 26.7s |
+| D-gradient | real_cell | CAVI (gradient Theta) | 2,700 | -43,535,463.7 | -168,748.9 | 32.2s |
+| D-linesearch | real_cell | CAVI (linesearch Theta) | 2,700 | -43,540,279.4 | -173,564.6 | 8.5s |
+
+Three findings, none of them what I expected going in:
+
+- **Flat init breaks CAVI specifically, and fast.** C collapses to 2-3
+  states within ~10 rounds and stays there (Theta blows up to ~76,000,
+  consistent with very coarse clusters). CAVI's updates are deterministic
+  and monotonic -- no gradient noise to keep redundant components alive --
+  so a fully symmetric start collapses much harder here than it did under
+  Adam (which still had ~490 states after the same flat init). This is the
+  cleanest confirmation yet that (1) and (5) interact: a bad init is worse
+  under a *better* optimizer, not better.
+- **Real-cell init stops the optimizer from doing much of anything.** All
+  three real-cell-init runs (B, D-gradient, D-linesearch) land within a
+  tight band (gap -169k to -174k) regardless of whether the continuous part
+  is Adam or CAVI, gradient-Theta or linesearch-Theta -- and all three keep
+  essentially every one of the 2,700 initial states alive. Once each state
+  starts anchored to a real, distinct cell, neither optimizer does much
+  active consolidating on its own; they mostly just refine each state
+  in place. So init dominates here, optimizer choice is a rounding error on
+  top of it -- the opposite of what motivated trying CAVI in the first
+  place.
+- **Theta: linesearch is smoother and ~4x faster, not obviously better.**
+  Gradient-Theta oscillates in a small cycle (4650 <-> 4760, never quite
+  settling); linesearch converges monotonically and finishes in a quarter
+  the time (8.5s vs 32.2s) -- but the two final log-likelihoods differ by
+  only 4,816 (statistically not much, one run each). Linesearch's cleaner
+  convergence and lower cost make it the better default going forward
+  regardless.
+
+None of these four raw partitions are close to competitive yet, still worse
+than even the *flat*-init Adam run from before (gap -203,946.1) -- the
+singleton-heavy real-cell-init runs (B, D) sit at roughly 2,700 states, not
+meaningfully different from where they started; nothing here does the
+consolidation merge/sweep did before. That's the pending question: with
+~2,700 live states instead of ~500, does merge+sweep still close most of
+the gap, or does starting this fragmented change the answer? The merge
+step itself is answering that slowly -- `_merge_clusters_optimally()` from
+~500 states finished in seconds; from ~2,700 it's still running after
+30+ minutes (2000%+ CPU, so genuinely computing, not stuck -- likely a
+much-worse-than-linear cost in the *number* of starting clusters, not
+something the earlier ~500-state run exercised). Results pending; will
+update this section once it's back.
