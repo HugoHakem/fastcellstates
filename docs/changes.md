@@ -207,19 +207,39 @@ is a more direct way to get there. Left as an explored-but-not-adopted option.
 **Pyro/SVI mixture as an alternative search (explored, not adopted).** Same
 Dirichlet-multinomial generative model, fit as a truncated stick-breaking
 mixture via Pyro (enumeration for the discrete assignment, SVI or closed-form
-CAVI for the continuous parameters) instead of the exact combinatorial search
--- motivated by SVI's minibatch scalability, which the current in-memory,
-per-cell merge/sweep machinery doesn't have. Across a fairly wide sweep (Adam
-vs. closed-form CAVI, flat vs. singleton-style real-cell initialisation,
-Theta fixed/co-adapted/gradient/line-search) on `pbmc3k`, nothing beat the
-existing `fast` preset end to end; the best result only got close (within
+CAVI for the continuous parameters) instead of the exact combinatorial search. It is motivated by SVI's minibatch scalability, which the current in-memory, per-cell merge/sweep machinery doesn't have.
+Different combination were tested on `pbmc3k`:
+
+- Adam vs. closed-form CAVI
+- flat vs. singleton-style real-cell initialisation for the $\vec\alpha$ prior
+- Theta fixed/co-adapted/gradient/line-search
+
+Nothing beat the existing `fast` preset end to end; the best result only got close (within
 0.03% of the tuned baseline's log-likelihood) by handing its raw partition to
 the *existing* merge+sweep machinery anyway, not from the SVI fit itself. The
-one axis this never actually tested -- a dataset large enough that the exact
-search's in-memory assumptions start to strain -- is also the only place SVI
+one axis this never actually tested: a dataset large enough that the exact
+search's in-memory assumptions start to strain. It is also the only place SVI
 would have a structural advantage, and is the natural place to revisit this.
 Full write-up, code, and every intermediate result:
 [`experiment/pyro-mixture`](https://github.com/HugoHakem/fastcellstates/tree/experiment/pyro-mixture/experiments/pyro_mixture).
+
+**Sanity kNN metric as an alternative `graph.cell_knn` distance (explored, not adopted).**
+Ported [Breda et al.](#bredaBayesianInferenceGene2021)'s [Sanity](https://github.com/jmbreda/Sanity) as
+`metric="sanity"`: a per-gene Poisson/log-normal empirical-Bayes correction
+(grid search over the prior variance + Lambert-W root-find, faithfully matching the reference C++'s own numerics) feeding its own uncertainty-weighted cell-cell distance, in place of the `pca` metric's
+log1p+PCA+Euclidean recipe.
+The log-likelihood improved:
+
+- by +0.0034% at the default resolution (0.1)
+- but only +0.000048% at resolution 1.0.  
+  
+The signal seems to get *weaker*, not stronger, as the over-partition gets finer, which is the opposite of
+what a genuine neighbourhood-quality effect should look like, and points
+more toward noise than signal. Cost: ~880s one-time to fit+correct on 2,700 cells (a compiled O(N^2 * G) kernel, not vectorizable the way the `pca` path is), on top of a 3-4.5x slower search itself. Not worth it as
+implemented; a GPU version could be implemented, but as of now if seems enough to experiment with what there is already.
+Overall this method would be much more principled / theoretically grounded, but might be worth to revisit later.
+
+Full write-up and code [`experiment/sanity-knn`](https://github.com/HugoHakem/fastcellstates/tree/experiment/sanity-knn).
 
 ## A note on single-cell states
 
@@ -298,5 +318,18 @@ because the $O(\text{genes per cell})$ incremental updates depend on conjugacy.
   journaltitle = {Nature Reviews Genetics},
   doi = {10.1038/s41576-023-00586-w},
   url = {https://doi.org/10.1038/s41576-023-00586-w},
+}
+```
+
+<a id="bredaBayesianInferenceGene2021"></a>
+
+```bibtex
+@article{bredaBayesianInferenceGene2021,
+  title = {Bayesian Inference of Gene Expression States from Single-Cell {{RNA-seq}} Data},
+  author = {Breda, Jérémie and Zavolan, Mihaela and family=Nimwegen, given=Erik, prefix=van, useprefix=true},
+  date = {2021-08},
+  journaltitle = {Nature Biotechnology},
+  doi = {10.1038/s41587-021-00875-x},
+  url = {https://www.nature.com/articles/s41587-021-00875-x},
 }
 ```
