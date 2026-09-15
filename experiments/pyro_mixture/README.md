@@ -293,9 +293,39 @@ partition that scored about the same as B's before polish. So raw
 log-likelihood alone doesn't predict how mergeable a partition is -- the
 two fits apparently organize *which* cells are near which states
 differently enough to matter a lot to a greedy hierarchical merge, even
-while scoring almost identically as a whole. Whether this is "CAVI
-organizes real-cell inits more usefully than Adam does" or something more
-specific to this one run is the open question; scoring D-gradient (same
-real-cell init, same CAVI E/M steps, only Theta's update rule differs) next
-to see whether it lands near D-linesearch (implicating CAVI generally) or
-nearer to B (implicating something specific to the linesearch Theta path).
+while scoring almost identically as a whole.
+
+**Full picture, all five variants:**
+
+| variant | init | optimizer | raw gap | merge gap | merge+sweep gap |
+|---|---|---|---|---|---|
+| flat-Adam *(earlier, K=700)* | flat | Adam | -203,946.1 | -134,939.6 | **-13,434.2** |
+| D-linesearch | real_cell | CAVI | -173,564.6 | -38,546.8 | -25,167.4 |
+| D-gradient | real_cell | CAVI | -168,748.9 | -64,305.9 | -46,561.9 |
+| C | flat | CAVI | -271,568.3 | -271,568.3 (no merges) | -63,708.2 |
+| B | real_cell | Adam | -172,946.4 | -85,280.2 | -68,292.9 |
+
+D-gradient lands between D-linesearch and B -- so the "CAVI organizes
+real-cell inits more usefully than Adam" effect holds directionally for
+both Theta variants, just more strongly with linesearch. And C is the
+biggest surprise: merge does *nothing* for it (3 states, no pair improves
+by merging -- there's nothing left to consolidate), yet sweep alone
+recovers most of the way, splitting cells off the 3 giant blobs into 35
+states and cutting the gap from -271,568.3 to -63,708.2. So a partition's
+raw score doesn't predict how it'll respond to polishing at all: C had by
+far the worst raw fit of anything here, and still out-polished B.
+
+**Bottom line:** nothing tried this round beats the original flat-init +
+Adam run from before, which remains the best result by a clear margin.
+Both of this round's changes were individually well-motivated and correctly
+diagnosed real problems (flat init does cause symmetric collapse under
+CAVI; Adam is a weaker optimizer geometry than CAVI on this conjugate
+family) -- but neither improves the *end-to-end* result once merge+sweep is
+applied, and real-cell init in particular makes every variant built on it
+worse, not better, than simply letting Adam grind on a flat start. The
+likely reason, from the B analysis above: a flat start's gradual, noisy
+Adam training was itself doing real organizing work that real-cell init
+removes -- so "fixing" the symmetric-collapse problem also broke a dynamic
+that was quietly helping. Within the real-cell family, CAVI (especially
+with linesearch Theta) recovers a good chunk of that loss back, but not
+all of it.
