@@ -204,6 +204,23 @@ the loss of exactness. More to the point: if the goal of a restricted proposal
 is to reach a good partition faster, seeding the search with a `leiden` partition
 is a more direct way to get there. Left as an explored-but-not-adopted option.
 
+**Pyro/SVI mixture as an alternative search (explored, not adopted).** Same
+Dirichlet-multinomial generative model, fit as a truncated stick-breaking
+mixture via Pyro (enumeration for the discrete assignment, SVI or closed-form
+CAVI for the continuous parameters) instead of the exact combinatorial search
+-- motivated by SVI's minibatch scalability, which the current in-memory,
+per-cell merge/sweep machinery doesn't have. Across a fairly wide sweep (Adam
+vs. closed-form CAVI, flat vs. singleton-style real-cell initialisation,
+Theta fixed/co-adapted/gradient/line-search) on `pbmc3k`, nothing beat the
+existing `fast` preset end to end; the best result only got close (within
+0.03% of the tuned baseline's log-likelihood) by handing its raw partition to
+the *existing* merge+sweep machinery anyway, not from the SVI fit itself. The
+one axis this never actually tested -- a dataset large enough that the exact
+search's in-memory assumptions start to strain -- is also the only place SVI
+would have a structural advantage, and is the natural place to revisit this.
+Full write-up, code, and every intermediate result:
+[`experiment/pyro-mixture`](https://github.com/HugoHakem/fastcellstates/tree/experiment/pyro-mixture/experiments/pyro_mixture).
+
 ## A note on single-cell states
 
 The paper argues that the many singlet cell-states the model finds reflect
