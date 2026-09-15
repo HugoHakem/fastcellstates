@@ -276,6 +276,26 @@ every state starts already fitting its own anchor cell well, so there's
 little gradient pressure to reorganize anything, and the entire
 consolidation job is left to one static greedy merge pass over ~2,700
 near-arbitrary micro-clusters at once -- a harder job than consolidating an
-already-partially-organized ~500-state partition. Scoring the two CAVI
-real-cell runs (D-gradient, D-linesearch) the same way next, to see if this
-holds regardless of optimizer or is specific to Adam.
+already-partially-organized ~500-state partition.
+
+**D-linesearch (real_cell, CAVI, linesearch Theta) tells a different story**
+-- despite a raw gap almost identical to B's (-173,564.6 vs -172,946.4), it
+responds to merge+sweep far better:
+
+| | states | log-likelihood | gap to res=1.0 baseline |
+|---|---|---|---|
+| D-linesearch, raw | 2,700 | -43,540,279.4 | -173,564.6 |
+| D-linesearch + merge | 511 | -43,405,261.6 | -38,546.8 |
+| D-linesearch + merge + sweep | 590 | -43,391,882.2 | **-25,167.4** |
+
+2.7x better than B's post-polish gap (-25,167.4 vs -68,292.9), from a raw
+partition that scored about the same as B's before polish. So raw
+log-likelihood alone doesn't predict how mergeable a partition is -- the
+two fits apparently organize *which* cells are near which states
+differently enough to matter a lot to a greedy hierarchical merge, even
+while scoring almost identically as a whole. Whether this is "CAVI
+organizes real-cell inits more usefully than Adam does" or something more
+specific to this one run is the open question; scoring D-gradient (same
+real-cell init, same CAVI E/M steps, only Theta's update rule differs) next
+to see whether it lands near D-linesearch (implicating CAVI generally) or
+nearer to B (implicating something specific to the linesearch Theta path).
