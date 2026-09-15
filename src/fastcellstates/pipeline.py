@@ -101,7 +101,7 @@ def run(data: str | list[str] | Counts, cfg: Config | None = None, genes=None) -
     knn = move_knn = None
     if need_over or prune:
         kmax = max(cfg.graph.k if need_over else 0, cfg.moves.sweep_prune_k if prune else 0)
-        knn_full = cell_knn(sp.csc_matrix(counts), k=kmax, metric="pca", n_pcs=cfg.graph.n_pcs)
+        knn_full = cell_knn(sp.csc_matrix(counts), k=kmax, metric=cfg.graph.metric, n_pcs=cfg.graph.n_pcs)
         if need_over:
             knn = np.ascontiguousarray(knn_full[:, : cfg.graph.k], dtype=np.int32)
         if prune:

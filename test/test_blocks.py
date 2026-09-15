@@ -22,6 +22,16 @@ def test_singletons():
     assert (lab == np.arange(50)).all()
 
 
+def test_sanity_knn_valid():
+    knn = cell_knn(np.ascontiguousarray(DATA_M), k=15, metric="sanity", n_pcs=20)
+    N = DATA_M.shape[1]
+    assert knn.shape == (N, 15) and knn.dtype == np.int32
+    row = np.arange(N)[:, None]
+    assert (knn != row).all()  # self excluded
+    assert ((knn >= 0) & (knn < N)).all()
+    assert (np.sort(knn, axis=1)[:, 1:] != np.sort(knn, axis=1)[:, :-1]).all()  # no dup neighbours
+
+
 def test_over_partition_valid_labelling():
     knn = cell_knn(np.ascontiguousarray(DATA_M), k=15, metric="pca", n_pcs=20)
     for method, kw in (

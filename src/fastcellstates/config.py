@@ -13,11 +13,14 @@ from dataclasses import dataclass, field
 
 @dataclass
 class GraphCfg:
-    """PCA-kNN graph over cells (feeds the search only, never the likelihood)."""
+    """kNN graph over cells (feeds the search only, never the likelihood)."""
 
     n_pcs: int = 50
     k: int = 30
     """kNN for the over-partition (Leiden) graph."""
+    metric: str = "pca"
+    """graph.cell_knn distance: pca | cosine_log1p | sanity (experimental,
+    see graph._sanity_delta)."""
 
 
 @dataclass
