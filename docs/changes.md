@@ -255,6 +255,28 @@ distinct gene expression state, and either way there is little to conclude from
 an $n=1$ cluster on its own. If you specifically care about the singlet tail,
 use the `exact` preset.
 
+## An externally fixed phi
+
+$\vec\phi$ is defined dataset-wide (eq. 12: the genomic mean, i.e. the optimal
+direction for the trivial one-cluster partition) and is normally estimated
+from whatever data a given run is handed. That estimation is decoupled from
+Theta's own fitting/search (`moves.coordinate_ascent` / `doubling` /
+`log_search`) purely as an implementation detail of `core.Cluster` -- nothing
+in the model itself requires $\vec\phi$ to come from the same population
+being clustered.
+
+`Cluster`'s `phi` parameter (and `pipeline.run`'s) makes that decoupling a
+first-class option: pin $\vec\phi$ to an externally estimated reference
+(`model.phi.global_phi`) and let Theta still be fit/searched as usual on top
+of it. The motivating case is comparing several *different* subsets of cells
+against a shared reference population -- e.g. a control/baseline group -- so
+that every subset's prior points the same direction and differences between
+their fitted partitions reflect the data, not each subset's own,
+independently-estimated $\vec\phi$. A gene the reference gives zero mass to is
+dropped as usual; a gene a small subset never itself expresses but the
+reference does is *not* dropped, unlike the local-$\vec\phi$ default (whose
+gene mask only ever sees that one subset's own zeros).
+
 ## Composable by design
 
 This reimplementation is modular by design.

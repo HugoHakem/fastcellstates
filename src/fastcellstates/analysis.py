@@ -185,39 +185,44 @@ def clusters_from_hierarchy(hierarchy_df, cluster_init=None, steps=-1):
 # ------ functions for finding marker genes ------
 
 
-def binomial_p(n, lam):
+def binomial_p(n, pseudocounts):
     """log P(n | N, Theta) per gene, the Beta-binomial marker score building
-    block (supp. info eq. 37).  ``n``, ``lam`` are (G,) arrays: a subset's
-    summed counts and its Dirichlet pseudocounts; N and Theta are read off as
-    ``n.sum()`` / ``lam.sum()``."""
-    lam_sum = np.sum(lam)
+    block (supp. info eq. 37).  ``n``, ``pseudocounts`` are (G,) arrays: a
+    subset's summed counts and its Dirichlet pseudocounts (``theta_g =
+    Theta*phi_g``); N and Theta are read off as ``n.sum()`` /
+    ``pseudocounts.sum()``."""
+    pseudocounts_sum = np.sum(pseudocounts)
     n_sum = np.sum(n)
     P = (
-        gammaln(lam_sum)
-        - gammaln(lam)
-        - gammaln(lam_sum - lam)
-        + gammaln(n + lam)
-        + gammaln(n_sum + lam_sum - n - lam)
-        - gammaln(n_sum + lam_sum)
+        gammaln(pseudocounts_sum)
+        - gammaln(pseudocounts)
+        - gammaln(pseudocounts_sum - pseudocounts)
+        + gammaln(n + pseudocounts)
+        + gammaln(n_sum + pseudocounts_sum - n - pseudocounts)
+        - gammaln(n_sum + pseudocounts_sum)
     )
 
     return P
 
 
-def gene_contribution(n1, n2, lam):
+def gene_contribution(n1, n2, pseudocounts):
     """Per-gene log-likelihood change from merging two subsets (n1, n2 -> n1+n2)."""
-    d = binomial_p(n1 + n2, lam) - binomial_p(n1, lam) - binomial_p(n2, lam)
+    d = (
+        binomial_p(n1 + n2, pseudocounts)
+        - binomial_p(n1, pseudocounts)
+        - binomial_p(n2, pseudocounts)
+    )
     return d
 
 
-def gene_contribution_multi(all_n, lam):
+def gene_contribution_multi(all_n, pseudocounts):
     """Per-gene log-likelihood change from merging a list of subsets into one."""
     d = 0
     all_n_sum = np.zeros_like(all_n[0])
     for n in all_n:
-        d -= binomial_p(n, lam)
+        d -= binomial_p(n, pseudocounts)
         all_n_sum += n
-    d += binomial_p(all_n_sum, lam)
+    d += binomial_p(all_n_sum, pseudocounts)
     return d
 
 
@@ -299,17 +304,19 @@ def marker_score_table(clst, hierarchy_df):
 
 def marker_scores(clst, C1, C2):
     """Marker-gene scores separating cell-state groups C1 and C2 (supp. info
-    §A4): for each (c1, c2) pair we add
-    ``betainc(n_gc1 + lambda_g, n_gc2 + lambda_g, x) * weight`` per gene, with
+    §A5, eq. 43-45): for each (c1, c2) pair we add
+    ``betainc(n_gc1 + theta_g, n_gc2 + theta_g, x) * weight`` per gene, with
     ``x = (N_c1 + Theta) / (N_c1 + N_c2 + 2 Theta)`` and
     ``weight = |c1| |c2| / (sum|C1| sum|C2|)``, then take the logit.
-    Positive score => gene higher in C2 than C1.
+    Positive score => gene higher in C2 than C1.  ``theta_g`` is the paper's
+    own per-gene notation for ``clst.dirichlet_pseudocounts[g]`` (``theta_g =
+    Theta*phi_g``); this package's ``phi`` is ``theta_g / Theta``.
     """
     C1 = np.asarray(list(C1), dtype=np.int64)
     C2 = np.asarray(list(C2), dtype=np.int64)
 
-    lam = np.asarray(clst.dirichlet_pseudocounts, dtype=np.float64)
-    lam_sum = float(lam.sum())
+    pseudocounts = np.asarray(clst.dirichlet_pseudocounts, dtype=np.float64)
+    pseudocounts_sum = float(pseudocounts.sum())
     counts = np.asarray(clst.cluster_umi_counts, dtype=np.float64)
     umi_sum = np.asarray(clst.cluster_umi_sum, dtype=np.float64)
     sizes = np.asarray(clst.cluster_sizes, dtype=np.float64)
@@ -318,11 +325,11 @@ def marker_scores(clst, C1, C2):
     gene_scores = np.zeros(int(clst.G), dtype=np.float64)
 
     for c1 in C1:
-        a = counts[:, c1] + lam
-        n1 = umi_sum[c1] + lam_sum
+        a = counts[:, c1] + pseudocounts
+        n1 = umi_sum[c1] + pseudocounts_sum
         for c2 in C2:
-            b = counts[:, c2] + lam
-            x = n1 / (umi_sum[c1] + umi_sum[c2] + 2.0 * lam_sum)
+            b = counts[:, c2] + pseudocounts
+            x = n1 / (umi_sum[c1] + umi_sum[c2] + 2.0 * pseudocounts_sum)
             weight = sizes[c1] * sizes[c2] / C1C2
             gene_scores += betainc(a, b, x) * weight
 

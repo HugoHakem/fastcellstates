@@ -196,8 +196,7 @@ def coordinate_ascent(recluster, theta0, rounds=10, tol=0.02):
     clst = recluster(theta)
     best_ll, best_theta, best_clst = clst.total_likelihood, theta, clst
     for _ in range(rounds):
-        phi = np.asarray(clst.LAMBDA, dtype=np.float64) / clst.LAMBDA_sum
-        new = DirichletMultinomial(theta, phi).fit_theta(_state_counts(clst)).theta
+        new = DirichletMultinomial(theta, clst.phi).fit_theta(_state_counts(clst)).theta
         converged = abs(np.log(new) - np.log(theta)) < tol
         theta = new
         clst = recluster(theta)

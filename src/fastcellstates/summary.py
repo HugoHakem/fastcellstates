@@ -5,12 +5,12 @@ A partition of the input cells into K states, each state a Dirichlet-multinomial
 posterior over gene frequencies.  Sample new cells, reconstruct the input, or
 place held-out cells, all without re-running anything.
 
-    alpha_c ~ Dirichlet(Theta*lambda + C_c)                   (posterior, eq. 18)
+    alpha_c ~ Dirichlet(Theta*phi + C_c)                      (posterior, eq. 18)
     cell in state c, library size L   ~   Multinomial(L, alpha_c)
 
 a fresh alpha per sampled cell (``Summary.sample``'s default): the proper
 posterior predictive, not the plug-in posterior mean
-``f_c,g = (Theta*lambda_g + C_c,g) / (Theta + N_c)``.
+``f_c,g = (Theta*phi_g + C_c,g) / (Theta + N_c)``.
 """
 
 from dataclasses import dataclass
@@ -40,11 +40,11 @@ class Summary:
     (``cluster_size / N``), the mixing proportions ``sample`` draws states
     from by default."""
     theta: float
-    """The fitted Dirichlet concentration Theta (``Cluster.LAMBDA_sum``)."""
-    lam: np.ndarray
-    """(G,) float, sums to 1: phi, the fixed genome-wide UMI-fraction profile
-    (supp. info slot 5; ``Cluster.LAMBDA / Theta``).  Shared by every state,
-    not a per-state estimate."""
+    """The fitted Dirichlet concentration Theta (``Cluster.theta``)."""
+    phi: np.ndarray
+    """(G,) float, sums to 1: the fixed genome-wide UMI-fraction profile
+    (supp. info slot 5; ``Cluster.phi``).  Shared by every state, not a
+    per-state estimate."""
     lib_sizes: list
     """K 1-D int arrays: the member cells' own library sizes (total UMI) per
     state, resampled by ``sample``/``reconstruct`` for realistic per-cell
@@ -65,8 +65,8 @@ class Summary:
 
     @property
     def model(self) -> DirichletMultinomial:
-        """The ``DirichletMultinomial`` (Theta, phi=lam) behind this summary."""
-        return DirichletMultinomial(self.theta, self.lam)
+        """The ``DirichletMultinomial`` (Theta, phi) behind this summary."""
+        return DirichletMultinomial(self.theta, self.phi)
 
     def freq(self, kind="mean") -> np.ndarray:
         """(K, G) posterior frequency vector per state."""
@@ -141,20 +141,20 @@ class Summary:
         return self.model.assign(self.counts, counts).astype(np.int64)
 
     # ------------------------------------------------------------------ #
-    # hierarchy / markers  (lazy: pure functions of counts + theta + lam)
+    # hierarchy / markers  (lazy: pure functions of counts + theta + phi)
     # ------------------------------------------------------------------ #
 
     def _state_cluster(self, n_cache=1000):
         """A K-"cell" Cluster whose cell m carries state m's summed counts.
         The merge hierarchy and marker scores depend only on the per-state count
-        vectors + Theta + lambda, so this reproduces exactly what a Cluster over
-        the real cells would give; no original data needed."""
+        vectors and the Dirichlet prior (theta, phi), so this reproduces exactly
+        what a Cluster over the real cells would give; no original data needed."""
         from .core import Cluster
 
         d = np.rint(self.counts).astype(np.int64).T  # (G, K)
         return Cluster(
             d,
-            self.model.pseudocounts,
+            pseudocounts=self.model.pseudocounts,
             c=np.arange(self.n_states, dtype=np.int32),
             max_clusters=self.n_states,
             n_cache=n_cache,
@@ -198,7 +198,6 @@ class Summary:
         C = np.asarray(clst.cluster_umi_counts.T, dtype=np.float64)
         C = C[np.asarray(clst.cluster_sizes) > 0]  # non-empty rows
         sizes = np.bincount(labels, minlength=K).astype(np.float64)
-        lam = np.asarray(clst.LAMBDA, dtype=np.float64) / clst.LAMBDA_sum
         cnts = counts.tocsc() if sp.issparse(counts) else np.asarray(counts)
         L = np.asarray(cnts.sum(axis=0)).ravel()
         lib = [L[labels == c] for c in range(K)]
@@ -206,8 +205,8 @@ class Summary:
             labels=labels,
             counts=C,
             weights=sizes / sizes.sum(),
-            theta=float(clst.LAMBDA_sum),
-            lam=lam,
+            theta=float(clst.theta),
+            phi=clst.phi,
             lib_sizes=lib,
             genes=getattr(clst, "genes", None),
         )
@@ -219,7 +218,7 @@ class Summary:
             counts=self.counts,
             weights=self.weights,
             theta=self.theta,
-            lam=self.lam,
+            phi=self.phi,
             lib_sizes=np.array(self.lib_sizes, dtype=object),
             genes=np.array([]) if self.genes is None else self.genes,
         )
@@ -233,7 +232,7 @@ class Summary:
             counts=z["counts"],
             weights=z["weights"],
             theta=float(z["theta"]),
-            lam=z["lam"],
+            phi=z["phi"],
             lib_sizes=list(z["lib_sizes"]),
             genes=None if g.size == 0 else g,
         )

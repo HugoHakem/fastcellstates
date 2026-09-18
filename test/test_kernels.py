@@ -23,7 +23,7 @@ DATA = GOLD["data"]
 LABELS = GOLD["labels"]
 OVER = GOLD["over_labels"]
 GMASK = DATA.sum(axis=1) > 0  # the Cluster drops all-zero genes
-DATA_M = DATA[GMASK]  # counts on the kept genes (matches nb.G / LAMBDA)
+DATA_M = DATA[GMASK]  # counts on the kept genes (matches nb.G / nb.dirichlet_pseudocounts)
 
 
 @pytest.fixture(scope="module")
@@ -42,7 +42,9 @@ def test_init_likelihood_matches_oracle(toy, alpha):
     nb = Cluster(data, alpha, n_cache=200)
     tot, _ = partition_loglik(DATA_M, np.arange(data.shape[1]), nb.dirichlet_pseudocounts)
     np.testing.assert_allclose(nb.total_likelihood, tot, rtol=1e-9)
-    np.testing.assert_allclose(nb.dirichlet_pseudocounts, GOLD[f"init_LAMBDA_{alpha}"], rtol=1e-12)
+    np.testing.assert_allclose(
+        nb.dirichlet_pseudocounts, GOLD[f"init_pseudocounts_{alpha}"], rtol=1e-12
+    )
     np.testing.assert_allclose(
         np.sort(nb.likelihood), np.sort(GOLD[f"init_like_{alpha}"]), rtol=1e-10
     )
@@ -99,8 +101,8 @@ def test_merge_hierarchy_matches_bruteforce_reference():
 
     rng = np.random.default_rng(4)
     G, K_true, per = 120, 8, 9
-    lam = rng.dirichlet(np.ones(G))
-    fc = rng.dirichlet(400 * lam, size=K_true)
+    phi = rng.dirichlet(np.ones(G))
+    fc = rng.dirichlet(400 * phi, size=K_true)
     cols = [rng.multinomial(600, fc[c]) for c in range(K_true) for _ in range(per)]
     data = np.array(cols).T  # (G, K_true*per)
     K0 = data.shape[1]

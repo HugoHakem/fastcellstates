@@ -117,7 +117,7 @@ def _init_lgamma_cache_ragged(pseudocounts, depth):
 
 @njit(cache=True)
 def _dirichlet_norm(pseudocounts):
-    """B = lgamma(sum lambda) - sum lgamma(lambda[g])."""
+    """B = lgamma(sum pseudocounts) - sum lgamma(pseudocounts[g])."""
     thesum = 0.0
     B = 0.0
     for i in range(pseudocounts.shape[0]):

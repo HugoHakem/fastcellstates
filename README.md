@@ -247,6 +247,16 @@ summ.hierarchy(); summ.cut(10); summ.markers()   # lazy, from the K count vector
 summ.save("out/summary.npz")
 ```
 
+Pin the prior's direction (`phi`) to an externally estimated reference instead
+of this run's own data, e.g. to keep several subsets directly comparable
+against a shared control population -- Theta is untouched and still follows
+`cfg.model.theta_method` as usual (see `docs/changes.md#an-externally-fixed-phi`):
+
+```python
+phi_ref = fcs.global_phi(control_counts)   # (G,) reference profile
+summ = fcs.run(subset_counts, cfg, phi=phi_ref)
+```
+
 The low-level `Cluster` optimiser and `run_mcmc` are still exposed for custom
 pipelines. See [`docs/notebooks`](docs/notebooks/README.md) for analysis and interpretation
 examples.

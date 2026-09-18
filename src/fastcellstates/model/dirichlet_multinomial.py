@@ -35,9 +35,9 @@ class DirichletMultinomial(Model):
     Parameters
     ----------
     theta : float
-        The Dirichlet concentration ``Theta`` (``Cluster.LAMBDA_sum``).
+        The Dirichlet concentration ``Theta`` (``Cluster.theta``).
     phi : (G,) ndarray
-        The fixed profile, sums to 1 (``Cluster.LAMBDA / Theta``).
+        The fixed profile, sums to 1 (``Cluster.phi``).
     """
 
     theta: float
@@ -52,7 +52,8 @@ class DirichletMultinomial(Model):
 
     @property
     def pseudocounts(self) -> np.ndarray:
-        """``theta_g = Theta * phi_g``: the Dirichlet parameter vector (``Cluster.LAMBDA``)."""
+        """``theta_g = Theta * phi_g``: the Dirichlet parameter vector
+        (``Cluster.dirichlet_pseudocounts``)."""
         return self.theta * self.phi
 
     def with_theta(self, theta):

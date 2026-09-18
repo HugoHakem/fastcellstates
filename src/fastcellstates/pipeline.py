@@ -39,12 +39,13 @@ def _initial_partition(cfg, knn):
     )
 
 
-def _cluster_at(counts, theta, init_partition, cfg, move_knn=None, genes=None):
+def _cluster_at(counts, theta, init_partition, cfg, move_knn=None, genes=None, phi=None):
     """One full clustering pass at a fixed Theta -> converged Cluster."""
     K0 = (int(init_partition.max()) + 1) if init_partition is not None else 0
     clst = Cluster(
         counts,
         float(theta),
+        phi=phi,
         c=init_partition,
         genes=genes,
         max_clusters=K0,
@@ -67,13 +68,22 @@ def _cluster_at(counts, theta, init_partition, cfg, move_knn=None, genes=None):
     return clst
 
 
-def run(data: str | list[str] | Counts, cfg: Config | None = None, genes=None) -> Summary:
+def run(data: str | list[str] | Counts, cfg: Config | None = None, genes=None, phi=None) -> Summary:
     """data: path(s) or a (G, N) counts array/matrix (genes x cells: the
     opposite of AnnData's own ``adata.X``, which is cells x genes; pass
     ``adata.X.T`` if building the array yourself, or pass the ``.h5ad`` path
     directly).  If the data is cells x genes and there's no convenient way to
     transpose it before calling (e.g. from the CLI), set ``cfg.transpose``
-    instead.  Returns a ``Summary``."""
+    instead.
+
+    ``phi``: (G,) ndarray, optional -- pin the Dirichlet prior's direction
+    (supp. info §A1 slot 5) instead of estimating it from ``data`` itself;
+    Theta is untouched by this and still follows ``cfg.model.theta_method``
+    (fixed / searched) as usual.  See ``core.Cluster``'s ``phi`` parameter
+    and ``model.phi.global_phi``.  Python-API only -- an array has no clean
+    CLI spelling yet.
+
+    Returns a ``Summary``."""
     if cfg is None:
         cfg = Config()
     if cfg.n_threads > 0:
@@ -111,7 +121,7 @@ def run(data: str | list[str] | Counts, cfg: Config | None = None, genes=None) -
     theta0 = cfg.model.theta or _heuristic_theta(counts)
 
     def build(t):
-        return _cluster_at(counts, t, init_partition, cfg, move_knn, genes)
+        return _cluster_at(counts, t, init_partition, cfg, move_knn, genes, phi)
 
     if cfg.model.theta_method == "fixed":
         clst = build(theta0)

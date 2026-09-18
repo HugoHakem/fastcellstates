@@ -24,7 +24,7 @@ from .analysis import (
 )
 from .config import PRESETS, Config, GraphCfg, InitCfg, ModelCfg, MovesCfg
 from .core import Cluster
-from .model import DirichletMultinomial, Model
+from .model import DirichletMultinomial, Model, global_phi
 from .moves import run_mcmc
 from .pipeline import run
 from .summary import Summary
@@ -45,6 +45,7 @@ __all__ = [
     "get_cluster_distances",
     "get_hierarchy_df",
     "get_scipy_hierarchy",
+    "global_phi",
     "hierarchy_to_newick",
     "marker_score_table",
     "marker_scores",

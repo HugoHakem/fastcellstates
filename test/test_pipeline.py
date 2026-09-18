@@ -13,8 +13,8 @@ from fastcellstates.summary import Summary
 def synthetic():
     rng = np.random.default_rng(1)
     G, N, K, L, theta = 400, 300, 4, 1200, 300.0
-    lam = rng.dirichlet(np.ones(G))
-    fc = rng.dirichlet(theta * lam, size=K)
+    phi = rng.dirichlet(np.ones(G))
+    fc = rng.dirichlet(theta * phi, size=K)
     labels = rng.integers(0, K, N)
     d = np.zeros((G, N), dtype=np.int64)
     for i in range(N):
@@ -56,14 +56,14 @@ def test_exact_preset_recovers_clusters(synthetic):
 
 def test_run_aligns_gene_names_to_kept_genes(synthetic):
     """Cluster drops all-zero-total genes; run() must filter the caller's
-    ``genes`` the same way, so summ.genes lines up with summ.counts / summ.lam
+    ``genes`` the same way, so summ.genes lines up with summ.counts / summ.phi
     (regression: run() used to store the unfiltered names)."""
     d, _ = synthetic
     padded = np.vstack([d, np.zeros((7, d.shape[1]), dtype=d.dtype)])  # 7 never-expressed
     names = np.array([f"g{i}" for i in range(padded.shape[0])])
     s = fcs.run(padded, _fast_cfg(), genes=names)
     assert s.genes is not None
-    assert s.genes.shape[0] == s.counts.shape[1] == s.lam.shape[0]
+    assert s.genes.shape[0] == s.counts.shape[1] == s.phi.shape[0]
     assert not np.isin(s.genes, names[-7:]).any()  # the padded names were dropped
     np.testing.assert_array_equal(s.genes, names[: d.shape[0]])
 
@@ -119,6 +119,23 @@ def test_coordinate_ascent_moves_theta(synthetic):
     assert s.theta > 0
 
 
+def test_run_phi_pins_prior_direction_independent_of_theta_method(synthetic):
+    """phi overrides the prior's direction; theta_method still governs Theta on
+    top of it, whether Theta is held fixed or searched."""
+    d, _ = synthetic
+    ext_phi = np.full(d.shape[0], 1.0 / d.shape[0])  # deliberately not the data's own phi
+
+    cfg = _fast_cfg()  # theta_method="fixed", theta=300.0
+    s = fcs.run(d, cfg, phi=ext_phi)
+    np.testing.assert_allclose(s.phi, ext_phi)
+    assert s.theta == 300.0
+
+    cfg2 = _fast_cfg()
+    cfg2.model = fcs.ModelCfg(theta_method="log_search")  # theta0 = heuristic, then searched
+    s2 = fcs.run(d, cfg2, phi=ext_phi)
+    np.testing.assert_allclose(s2.phi, ext_phi)  # phi stays pinned regardless
+
+
 def test_summary_generative_roundtrip(synthetic):
     d, _ = synthetic
     s = fcs.run(d, _fast_cfg())
@@ -145,6 +162,7 @@ def test_summary_save_load(tmp_path, synthetic):
     np.testing.assert_array_equal(r.labels, s.labels)
     np.testing.assert_allclose(r.freq(), s.freq())
     assert r.theta == s.theta
+    np.testing.assert_allclose(r.phi, s.phi)
 
 
 def test_summary_hierarchy_is_lazy_and_deterministic(tmp_path, synthetic):
@@ -165,7 +183,7 @@ def test_summary_hierarchy_is_lazy_and_deterministic(tmp_path, synthetic):
     assert m.shape == (s.n_states - 1, s.counts.shape[1])
     assert not np.isnan(m).any()  # +-inf allowed, NaN not
 
-    # save/load -> byte-identical hierarchy (pure function of counts + theta + lam)
+    # save/load -> byte-identical hierarchy (pure function of counts + theta + phi)
     p = tmp_path / "s.npz"
     s.save(p)
     h2 = Summary.load(p).hierarchy()

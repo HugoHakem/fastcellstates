@@ -34,10 +34,32 @@ class Cluster:
         opposite of AnnData's own convention (``adata.X`` is cells x genes):
         pass ``adata.X.T``, or go through ``io.read("file.h5ad")``, which
         transposes for you.
-    l : float | (G,) ndarray | None
-        Dirichlet prior.  A scalar sets Theta with per-gene pseudo-counts
-        proportional to the genomic mean; an array is the prior directly;
-        ``None`` uses the depth heuristic ``2 ** round(log2(mean UMI))``.
+    theta : float | None
+        The Dirichlet concentration Theta (supp. info §A1 slot 4).  ``None``
+        uses the depth heuristic ``2 ** round(log2(mean UMI))``.  Mutually
+        exclusive with ``pseudocounts``.
+    phi : (G,) ndarray | None
+        Override the fixed profile (slot 5, eq. 12) that would otherwise be
+        estimated from ``d`` itself (``gene_totals / grand_total``); must
+        sum to 1.  Only meaningful alongside ``theta`` (not
+        ``pseudocounts``): Theta still scales it and still gets fit/searched
+        by ``moves`` exactly as usual, but the *direction* of the prior is
+        pinned to ``phi`` regardless of what ``d`` looks like -- e.g. fit
+        ``phi`` once on a reference population (``model.phi.global_phi``)
+        and reuse it, unchanged, when clustering a different, smaller
+        population you want directly comparable to it. A gene with
+        ``phi_g == 0`` is dropped the same way a gene with zero local mass
+        would be; a gene this subset never itself expresses but ``phi``
+        gives nonzero mass to is *not* dropped (the local-``phi`` default
+        only ever sees this subset's own zeros).
+    pseudocounts : (G,) ndarray | None
+        The full Dirichlet prior vector directly, bypassing the Theta*phi
+        decomposition entirely (the DM marginal likelihood itself never
+        assumes that shape; only ``moves``' Theta search does). Mutually
+        exclusive with ``theta``/``phi``. This is the fully general escape
+        hatch: a Theta later read back off the ``Cluster`` (``.theta``) is
+        just ``pseudocounts.sum()``, whether or not that sum was chosen
+        deliberately.
     c : (N,) int | None, initial labels (default: every cell its own cluster).
     genes : (G,), optional gene names.
     max_clusters : int, n_boxes; 0 -> N (one box per cell).
@@ -50,7 +72,9 @@ class Cluster:
     def __init__(
         self,
         d: Counts,
-        l=None,
+        theta=None,
+        phi=None,
+        pseudocounts=None,
         c=None,
         genes=None,
         max_clusters=0,
@@ -71,22 +95,36 @@ class Cluster:
         grand_total = float(gene_totals.sum())
 
         # ---- Dirichlet pseudo-counts / non-expressed gene filtering ----
-        if isinstance(l, np.ndarray):
-            if l.shape[0] != G0:
-                raise ValueError("The shapes of the data and lambda do not match")
-            if np.any(l <= 0):
+        if pseudocounts is not None:
+            if theta is not None or phi is not None:
+                raise ValueError("pass either pseudocounts directly, or theta/phi, not both")
+            pseudocounts = np.asarray(pseudocounts, dtype=np.float64)
+            if pseudocounts.shape[0] != G0:
+                raise ValueError("The shapes of the data and pseudocounts do not match")
+            if np.any(pseudocounts <= 0):
                 raise ValueError("all dirichlet pseudo-counts must be >0")
-            pseudocounts = np.asarray(l, dtype=np.float64)
             gene_mask = None
         else:
-            if l is None:
+            if theta is None:
                 theta = 2.0 ** (np.round(np.log2(grand_total / N0)))
             else:
-                l = float(l)
-                if l <= 0.0:
+                theta = float(theta)
+                if theta <= 0.0:
                     raise ValueError("dirichlet prior parameter must be > 0")
-                theta = l
-            pseudocounts = theta * gene_totals / grand_total
+            if phi is not None:
+                phi = np.asarray(phi, dtype=np.float64)
+                if phi.shape[0] != G0:
+                    raise ValueError("phi has a different length than the data's genes")
+                if not np.isclose(phi.sum(), 1.0, atol=1e-6):
+                    # Prior.theta is pseudocounts.sum(), so an unnormalised phi would
+                    # silently make the *actual* concentration theta*phi.sum(), not
+                    # the theta the caller passed -- fail loud, don't guess a fix.
+                    raise ValueError(f"phi must sum to 1 (got {phi.sum():.6g})")
+                if np.any(phi < 0.0):
+                    raise ValueError("phi must be non-negative")
+                pseudocounts = theta * phi
+            else:
+                pseudocounts = theta * gene_totals / grand_total
             gene_mask = pseudocounts > 0
             if np.any(gene_mask):
                 pseudocounts = pseudocounts[gene_mask]
@@ -253,19 +291,39 @@ class Cluster:
         self._init_counts()
         return mapping
 
-    def set_dirichlet_pseudocounts(self, l, n_cache=-1):
+    def set_dirichlet_pseudocounts(self, theta=None, phi=None, pseudocounts=None, n_cache=-1):
+        """Rebuild the prior at a new ``theta``/``phi``/``pseudocounts``, keeping
+        the current partition.  Same three-way contract as the constructor
+        (see its docstring); note this never remembers a ``phi`` the
+        ``Cluster`` may have been built with -- pass it again explicitly to
+        keep it pinned across the change.
+        """
         gene_totals = self._gene_totals()
-        if isinstance(l, np.ndarray):
-            if l.shape[0] != self.G:
-                raise ValueError("The shapes of the data and lambda do not match")
-            if np.any(l <= 0):
+        if pseudocounts is not None:
+            if theta is not None or phi is not None:
+                raise ValueError("pass either pseudocounts directly, or theta/phi, not both")
+            pseudocounts = np.asarray(pseudocounts, dtype=np.float64)
+            if pseudocounts.shape[0] != self.G:
+                raise ValueError("The shapes of the data and pseudocounts do not match")
+            if np.any(pseudocounts <= 0):
                 raise ValueError("all dirichlet pseudo-counts must be >0")
-            pseudocounts = np.asarray(l, dtype=np.float64)
         else:
-            l = float(l)
-            if l <= 0.0:
+            if theta is None:
+                raise ValueError("pass theta (optionally with phi), or pseudocounts")
+            theta = float(theta)
+            if theta <= 0.0:
                 raise ValueError("dirichlet prior parameter must be > 0")
-            pseudocounts = l * gene_totals / gene_totals.sum()
+            if phi is not None:
+                phi = np.asarray(phi, dtype=np.float64)
+                if phi.shape[0] != self.G:
+                    raise ValueError("phi has a different length than the data's genes")
+                if not np.isclose(phi.sum(), 1.0, atol=1e-6):
+                    raise ValueError(f"phi must sum to 1 (got {phi.sum():.6g})")
+                if np.any(phi < 0.0):
+                    raise ValueError("phi must be non-negative")
+                pseudocounts = theta * phi
+            else:
+                pseudocounts = theta * gene_totals / gene_totals.sum()
 
         nc = self.prior.n_cache if n_cache <= 0 else int(n_cache)
         self.prior = _k.build_prior(pseudocounts, gene_totals, nc)
@@ -388,12 +446,16 @@ class Cluster:
         return self.prior.n_cache
 
     @property
-    def LAMBDA(self):
-        return self.prior.pseudocounts
+    def theta(self):
+        """The Dirichlet concentration Theta -- ``dirichlet_pseudocounts.sum()``."""
+        return self.prior.theta
 
     @property
-    def LAMBDA_sum(self):
-        return self.prior.theta
+    def phi(self):
+        """(G,) the fixed profile this partition's prior currently points at,
+        ``dirichlet_pseudocounts / theta`` -- whatever ``phi``/``pseudocounts``
+        it was built or last set with."""
+        return np.asarray(self.prior.pseudocounts, dtype=np.float64) / self.prior.theta
 
     @property
     def B(self):
@@ -436,13 +498,11 @@ class Cluster:
     @property
     def model(self):
         """The ``DirichletMultinomial`` (Theta, phi) this partition optimises under.
-        ``phi`` is over the kept genes, so ``model.pseudocounts == LAMBDA``."""
+        ``phi`` is over the kept genes, so ``model.pseudocounts ==
+        dirichlet_pseudocounts``."""
         from .model import DirichletMultinomial
 
-        return DirichletMultinomial(
-            self.prior.theta,
-            np.asarray(self.prior.pseudocounts, dtype=np.float64) / self.prior.theta,
-        )
+        return DirichletMultinomial(self.theta, self.phi)
 
     @property
     def umi_data(self):
