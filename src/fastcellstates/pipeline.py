@@ -126,10 +126,10 @@ def run(data: str | list[str] | Counts, cfg: Config | None = None, genes=None, p
     if cfg.model.theta_method == "fixed":
         clst = build(theta0)
     elif cfg.model.theta_method == "doubling":
-        clst = _moves.doubling(build, theta0)[1]
+        clst = _moves.doubling(build, theta0, max_evals=cfg.model.theta_rounds)[1]
     elif cfg.model.theta_method == "coordinate_ascent":
         clst = _moves.coordinate_ascent(
-            build, theta0, rounds=cfg.model.theta_rounds, tol=cfg.model.theta_tol
+            build, theta0, max_evals=cfg.model.theta_rounds, tol=cfg.model.theta_tol
         )[1]
     elif cfg.model.theta_method == "log_search":
         clst = _moves.log_search(

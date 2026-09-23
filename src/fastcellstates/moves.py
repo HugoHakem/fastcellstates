@@ -14,10 +14,16 @@ Cell sweeps: greedy single-cell reassignment to a local likelihood maximum:
 
 MCMC: ``run_mcmc`` (from-singletons or warm-started).
 
-Theta search: ``coordinate_ascent`` alternates re-clustering with the
-model's ``fit_theta`` (was ``prior.py``); ``doubling`` and ``log_search``
-instead probe ``total_likelihood`` directly at each Theta, reclustering from
-scratch every probe (a coarse power-of-2 walk, or Brent's method).
+Theta search: all three strategies share the same skeleton -- propose a
+candidate Theta, recluster fully at it, track the best (Theta, cluster) seen
+so far (:func:`_recluster_and_track`) -- and differ only in how the next
+Theta is proposed. ``coordinate_ascent`` and ``doubling`` propose from the
+current state alone (Minka's exact best-response, or a two-phase greedy
+x2/x0.5 walk) and share ``_recluster_and_track``'s bookkeeping directly;
+``log_search`` instead hands the problem to Brent's method
+(``scipy.optimize.minimize_scalar``), which needs the *history* of every
+probe to decide its next one, so it keeps its own cache rather than fitting
+the shared helper's per-call shape.
 
 The agglomerative DM-optimal merge is ``Cluster._merge_clusters_optimally``.
 """
@@ -180,41 +186,79 @@ def _state_counts(clst):
     return C[np.asarray(clst.cluster_sizes) > 0]
 
 
-def coordinate_ascent(recluster, theta0, rounds=10, tol=0.02):
+def _recluster_and_track(recluster, theta, best):
+    """One (theta, recluster) probe, shared by ``coordinate_ascent`` and
+    ``doubling``: recluster at ``theta``, then compare against ``best`` (a
+    ``(best_ll, best_theta, best_clst)`` triple). Reclustering starts over
+    from the same initial partition every time (never warm-started from a
+    previous probe's result -- the search explored at one Theta shouldn't
+    depend on what a different Theta's search happened to converge to), so
+    it is not guaranteed to improve on the previous probe; every theta
+    search here therefore tracks the best pair seen across all probes rather
+    than trusting whichever one ran last.
+
+    Returns ``(clst, best, improved)``.
+    """
+    clst = recluster(theta)
+    if clst.total_likelihood > best[0]:
+        return clst, (clst.total_likelihood, theta, clst), True
+    return clst, best, False
+
+
+def coordinate_ascent(recluster, theta0, max_evals=10, tol=0.02):
     """(fix Theta -> recluster) <-> (fix partition -> Minka MLE), to convergence.
 
     ``recluster(theta)`` -> a fresh, converged ``Cluster`` at that Theta.
-    Each round reclusters from scratch (not from the previous round's
-    partition), so the alternation is not guaranteed monotonic in the
-    likelihood; ``rounds`` bounds the cost (a hard cap, not a target) and the
-    best (theta, cluster) seen across all rounds is returned, mirroring
-    ``doubling``, rather than whichever round happened to run last.
+    Each round reclusters from scratch (see :func:`_recluster_and_track`), so
+    the alternation is not guaranteed monotonic in the likelihood;
+    ``max_evals`` bounds the cost (a hard cap, not a target) and the best
+    (theta, cluster) seen across all rounds is returned, mirroring
+    ``doubling`` / ``log_search``, rather than whichever round happened to
+    run last. ``tol``: stop once Minka's next proposed Theta barely moves
+    ``log(theta)`` from the current round's -- "has the alternation stopped
+    moving," not the same notion as ``log_search``'s ``tol`` (Brent's own
+    bracket-width tolerance).
     """
     from .model import DirichletMultinomial
 
     theta = float(theta0)
     clst = recluster(theta)
-    best_ll, best_theta, best_clst = clst.total_likelihood, theta, clst
-    for _ in range(rounds):
+    best = (clst.total_likelihood, theta, clst)
+    for _ in range(max_evals):
         new = DirichletMultinomial(theta, clst.phi).fit_theta(_state_counts(clst)).theta
         converged = abs(np.log(new) - np.log(theta)) < tol
         theta = new
-        clst = recluster(theta)
-        if clst.total_likelihood > best_ll:
-            best_ll, best_theta, best_clst = clst.total_likelihood, theta, clst
+        _, best, _ = _recluster_and_track(recluster, theta, best)
         if converged:
             break
-    return best_theta, best_clst
+    return best[1], best[2]
 
 
 def log_search(recluster, theta0, tol=0.01, max_evals=30):
     """Maximise total_likelihood over Theta by Brent's method on log(Theta)
     (``scipy.optimize.minimize_scalar``): golden-section bracketing plus
     parabolic interpolation, rather than ``doubling``'s coarse power-of-2
-    grid.  Assumes the likelihood is unimodal in log(Theta) (checked
-    empirically on real data, not enforced here); every probe reclusters
-    from scratch, like ``doubling``, so nothing is carried across probes.
-    Returns ``(theta_star, cluster)``.
+    grid or ``coordinate_ascent``'s Minka-guided proposals. Structurally
+    different from those two, not just a different step rule: Brent decides
+    its next probe from the *history* of every point evaluated so far (a
+    parabola through the recent points), where the other two only ever need
+    the current state -- so it isn't expressible as a per-call "propose the
+    next theta" step the way theirs are. Assumes the likelihood is unimodal
+    in log(Theta) (checked empirically on real data, not enforced here);
+    every probe reclusters from scratch, like the other two, so nothing is
+    carried across probes. Because unimodality isn't guaranteed, every probe
+    is cached and the best-scoring one is returned, rather than trusting
+    whichever point Brent itself converged to -- same "track the best seen,
+    not the last one" idea as :func:`_recluster_and_track`, just via a cache
+    instead of a running triple. ``tol`` is Brent's own bracket-width
+    tolerance on log(Theta) (``xtol``) -- not the same notion as
+    ``coordinate_ascent``'s ``tol`` (has the alternation's proposed Theta
+    stopped moving). ``max_evals``: same name and same role (a hard cap on
+    reclusters) as ``coordinate_ascent``'s, but not necessarily the same
+    value -- Minka's step is an informed best-response and often needs few
+    rounds; Brent's steps are comparatively blind (each only narrows a
+    bracket), so a fair comparison may need a larger budget here, not a
+    shared default. Returns ``(theta_star, cluster)``.
     """
     from scipy.optimize import minimize_scalar
 
@@ -238,23 +282,34 @@ def log_search(recluster, theta0, tol=0.01, max_evals=30):
     return float(np.exp(best_x)), best_clst
 
 
-def doubling(recluster, theta0):
-    """The original prior search: probe Theta x2, then /2; adopt the better and
-    re-cluster once each way.  One step per direction, not a full optimum.
-    Returns ``(theta_star, cluster)``.
+def doubling(recluster, theta0, max_evals=10):
+    """The original prior search: probe Theta x2 (or /2), adopting and
+    re-clustering again in whichever direction keeps improving; stops the
+    moment a probe fails to improve, without trying the other direction once
+    the first has moved at all. Legacy: reproduces the original published
+    algorithm's exact search, not a general optimum -- optimal only up to a
+    factor of 2, and it never bisects inside a gap. Uses the same
+    "recluster, then track the best (theta, cluster) seen" idea as
+    :func:`_recluster_and_track` / ``coordinate_ascent``, just with a
+    two-phase greedy proposal (keep doubling/halving while it helps) instead
+    of Minka's best-response. ``max_evals`` is a safety cap on the total
+    number of reclusters across both directions -- the original algorithm has
+    no such cap (unbounded in principle if pathological data kept improving
+    indefinitely); in the ordinary case this rarely binds, since the search
+    self-terminates in a handful of probes.
     """
     theta = float(theta0)
     clst = recluster(theta)
-    best_ll, best_theta, best_clst = clst.total_likelihood, theta, clst
+    best = (clst.total_likelihood, theta, clst)
+    evals = 0
     for factor in (2.0, 0.5):
         t = theta * factor
-        while True:
-            c = recluster(t)
-            if c.total_likelihood > best_ll:
-                best_ll, best_theta, best_clst = c.total_likelihood, t, c
-                t *= factor
-            else:
+        while evals < max_evals:
+            evals += 1
+            _, best, improved = _recluster_and_track(recluster, t, best)
+            if not improved:
                 break
-        if best_theta != theta:
+            t *= factor
+        if best[1] != theta:
             break
-    return best_theta, best_clst
+    return best[1], best[2]

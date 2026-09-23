@@ -150,6 +150,42 @@ Three strategies drive the alternation:
   `doubling` is. Matches or beats both of the above in practice, typically
   at lower cost.
 
+### Two of the three actually share a skeleton; the third can't
+
+Looked at closely, `coordinate_ascent` and `doubling` are the same loop with
+a one-line difference: propose the next Theta from the *current* state alone
+(no history needed), recluster fully, compare against the best `(theta,
+cluster)` seen so far. That shared skeleton is now `_recluster_and_track`,
+and both call it -- `coordinate_ascent` proposing Minka's fixed point,
+`doubling` proposing `theta * 2` / `theta * 0.5` while it keeps improving.
+Two direct, previously-inconsistent gaps close as a result:
+
+- `doubling` had no evaluation cap at all (unbounded in principle, though it
+  self-terminates in practice within a handful of probes); it now takes
+  `max_evals` like the other two, and `pipeline.run()` wires `theta_rounds`
+  into it the same way it already did for `coordinate_ascent`/`log_search` --
+  previously the only one of the three not driven by the shared config field.
+- `coordinate_ascent`'s own parameter was named `rounds`, not `max_evals`
+  like `log_search`'s; renamed for a consistent interface across all three,
+  even though what "an evaluation" costs differs (a Minka step is cheap and
+  informed; a recluster is not).
+
+`log_search` doesn't fold into `_recluster_and_track`, and deliberately isn't
+forced to: Brent's method decides its next probe from the *history* of every
+point evaluated so far (a local parabola through recent points), not from the
+current state alone, so it isn't expressible as the same per-call "propose
+the next theta" shape the other two share. It keeps its own cache -- the same
+"track the best seen, not the last one" idea, just implemented against a
+history-aware search instead of a memoryless one. Its `tol`/`max_evals` share
+names with the other two for a consistent interface, but not the same
+meaning: `tol` is Brent's own bracket-width tolerance (has the *search
+interval* narrowed enough), not "has a proposed Theta stopped moving"; and
+`max_evals`' right *value* isn't assumed to match `coordinate_ascent`'s
+default either -- Minka's step is an informed best-response and often
+converges in few rounds, while Brent's steps are comparatively blind (each
+one only narrows a bracket), so a fair comparison may cost more evaluations
+here, not fewer.
+
 ## Sampling utilities
 
 The original writes out the partition, the hierarchy, and marker scores. This

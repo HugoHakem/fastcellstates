@@ -63,15 +63,21 @@ class ModelCfg:
     theta_method: str = "log_search"
     """log_search | coordinate_ascent | doubling | fixed."""
     theta_rounds: int = 10
-    """coordinate_ascent: max (fit Theta <-> recluster) alternations, a hard
-    cap not a target (each round reclusters from scratch, so nothing
-    guarantees convergence by round ``theta_rounds``).  log_search: max
-    Theta probes for Brent's method.  See ``moves.coordinate_ascent`` /
-    ``moves.log_search``."""
+    """coordinate_ascent / doubling: max reclusters, a hard cap not a target
+    (each one reclusters from scratch, so nothing guarantees convergence by
+    round ``theta_rounds``).  log_search: max Theta probes for Brent's
+    method -- same role (a hard cap) and the same field, but not necessarily
+    a value that suits both equally: Brent's steps are less informed than
+    Minka's best-response and may need a larger budget for a fair comparison.
+    See ``moves.coordinate_ascent`` / ``moves.doubling`` / ``moves.log_search``."""
     theta_tol: float = 0.02
     """coordinate_ascent: stop once ``|log(new_theta) - log(theta))| <
-    theta_tol`` between rounds.  log_search: Brent's method ``xtol``, on
-    log(Theta)."""
+    theta_tol`` between rounds -- has the alternation's proposed Theta
+    stopped moving.  log_search: Brent's own bracket-width tolerance
+    (``xtol``), on log(Theta) -- a different notion (has the search interval
+    narrowed enough), not "has a proposal converged".  doubling doesn't use
+    ``theta_tol`` at all: it has no analogous convergence check, only its own
+    greedy stop-on-non-improvement rule."""
     n_cache: int = 10_000
     """target average lgamma-cache depth per gene (total budget n_genes *
     n_cache entries, water-filled per gene: low-expression genes get full
