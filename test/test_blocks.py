@@ -88,6 +88,51 @@ def test_posterior_freq_normalised():
         assert (f >= 0).all()
 
 
+def test_posterior_freq_var_matches_monte_carlo():
+    rng = np.random.default_rng(0)
+    phi = np.array([0.5, 0.3, 0.2])
+    dm = DirichletMultinomial(20.0, phi)
+    C = np.array([[10.0, 0, 5], [0, 20, 1]])
+    var = dm.posterior_freq_var(C)  # eq. 21
+    a = dm.posterior_params(C)
+    for k in range(C.shape[0]):
+        draws = rng.dirichlet(a[k], size=2_000_000)
+        np.testing.assert_allclose(var[k], draws.var(0), atol=2e-5)
+
+
+def test_posterior_log_freq_matches_monte_carlo():
+    # eq. 22/23/24 against a direct Dirichlet Monte Carlo -- "mean" (eq. 23)
+    # isn't log(posterior_freq(..., kind="mean")): E[log X] != log E[X].
+    rng = np.random.default_rng(0)
+    phi = np.array([0.5, 0.3, 0.2])
+    theta = 20.0
+    dm = DirichletMultinomial(theta, phi)
+    C = np.array([[10.0, 0, 5], [0, 20, 1]])
+    mean = dm.posterior_log_freq(C, kind="mean")  # eq. 23
+    var = dm.posterior_log_freq_var(C)  # eq. 24
+
+    a = dm.posterior_params(C)
+    for k in range(C.shape[0]):
+        draws = np.log(rng.dirichlet(a[k], size=2_000_000))
+        np.testing.assert_allclose(mean[k], draws.mean(0), atol=2e-3)
+        np.testing.assert_allclose(var[k], draws.var(0), atol=2e-3)
+
+    # eq. 22 ("mode") coincides algebraically with log(posterior_freq(mean))
+    # -- both are exactly log(a) - log(A) -- even though eq. 23 ("mean") does not.
+    mode = dm.posterior_log_freq(C, kind="mode")
+    np.testing.assert_allclose(mode, np.log(dm.posterior_freq(C, kind="mean")))
+
+    # the Jensen gap eq. 23 exists for: mean of log != log of mean (== mode
+    # here), closing as the subset's own count grows relative to theta (every
+    # entry scaled up, not just multiplied -- a multiplicative scaling leaves
+    # an exact zero at zero, understating how fast the gap actually closes).
+    assert np.abs(mean - mode).max() > 1e-3
+    big_C = C * 1e6 + 1e6
+    mean_big = dm.posterior_log_freq(big_C, kind="mean")
+    mode_big = dm.posterior_log_freq(big_C, kind="mode")
+    assert np.abs(mean_big - mode_big).max() < 1e-6
+
+
 def test_cluster_phi_overrides_local_direction():
     """phi pins the prior's direction; theta still scales it as usual."""
     theta = 500.0

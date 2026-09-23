@@ -9,7 +9,8 @@ numbers are ``model.base.Model``'s; see it for the general table):
     slot 5   phi            fixed genome-average profile (``model.phi.global_phi``)
     slot 6   Theta fit      Minka fixed-point MLE at a fixed partition
     slot 8   subset marginal LL   closed form, eq. 15
-    slot 10  posterior predictive  mean (eq. 20) / mode (eq. 19)
+    slot 10  posterior over alpha  mean (eq. 20) / mode (eq. 19) / var (eq. 21);
+                                   log-alpha mean (eq. 23) / mode (eq. 22) / var (eq. 24)
 
 The O(G) incremental move / merge deltas that make the search fast (slot 9)
 are the conjugacy pay-off; for this model they live in ``model._dm_kernels``
@@ -21,7 +22,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import scipy.sparse as sp
-from scipy.special import digamma, gammaln
+from scipy.special import digamma, gammaln, polygamma
 
 from .._types import Counts
 from .base import Model
@@ -116,6 +117,43 @@ class DirichletMultinomial(Model):
         elif kind != "mean":
             raise ValueError(f"kind must be 'mean' or 'mode', got {kind!r}")
         return a / a.sum(1, keepdims=True)
+
+    def posterior_freq_var(self, state_counts) -> np.ndarray:
+        """(K, G) posterior variance of the transcription-quotient ``alpha``
+        per subset (eq. 21): the Beta-marginal variance of a Dirichlet
+        component, ``a*(A-a) / (A**2*(A+1))`` with ``a = Theta*phi + C``,
+        ``A = Theta + N_c``."""
+        a = self.posterior_params(state_counts)
+        A = a.sum(1, keepdims=True)
+        return a * (A - a) / (A**2 * (A + 1.0))
+
+    def posterior_log_freq(self, state_counts, kind="mean") -> np.ndarray:
+        """(K, G) posterior ``log(alpha)`` (``delta``) per subset.
+
+        ``"mean"`` -> ``psi(Theta phi + C) - psi(Theta + N_c)``        (eq. 23)
+        ``"mode"`` -> ``log(Theta phi + C) - log(Theta + N_c)``        (eq. 22)
+
+        Neither is ``log(posterior_freq(..., kind=...))``, except
+        coincidentally for ``"mode"``: ``log(alpha)`` is one component of a
+        Dirichlet vector, marginally Beta(a, A-a), and for ``"mean"``,
+        E[log X] != log E[X] for X ~ Beta (Jensen's gap) -- it only vanishes
+        as ``N_c`` grows. Use ``kind="mean"`` rather than
+        ``log(posterior_freq(..., kind="mean"))`` wherever that gap isn't
+        provably negligible (i.e. anywhere ``N_c`` isn't huge)."""
+        a = self.posterior_params(state_counts)
+        A = a.sum(1, keepdims=True)
+        if kind == "mode":
+            return np.log(a) - np.log(A)
+        elif kind != "mean":
+            raise ValueError(f"kind must be 'mean' or 'mode', got {kind!r}")
+        return digamma(a) - digamma(A)
+
+    def posterior_log_freq_var(self, state_counts) -> np.ndarray:
+        """(K, G) posterior variance of ``log(alpha)`` per subset (eq. 24):
+        ``psi_1(Theta*phi + C) - psi_1(Theta + N_c)``."""
+        a = self.posterior_params(state_counts)
+        A = a.sum(1, keepdims=True)
+        return polygamma(1, a) - polygamma(1, A)
 
     def log_posterior_predictive(self, state_counts, query: Counts) -> np.ndarray:
         """(K, M) log P(query cell | subset k) under the DM posterior predictive.
