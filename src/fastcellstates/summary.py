@@ -95,53 +95,59 @@ class Summary:
         fitted cells (beyond the paper; see the module docstring).
 
         ``counts``: the (G, N) cells this summary was fitted on, in the same
-        order as ``labels``.  With y = x / L a cell's share of gene g, the
-        state posterior means f_c,g (``freq("mean")``) and weights w_c, the
-        law of total variance over state, depth and the within-state spread
-        gives, to first order in f,
+        order as ``labels``.  Theta_g describes how cells vary within a state,
+        so it is estimated from exactly that: each cell against its own state's
+        mean, pooled over the states.  Within state c, with y = x / L a cell's
+        share, the law of total variance over the spread and the counting
+        gives, to first order in the share,
 
-            Var(y_g) = sum_c w_c (f_c,g - mu_g)^2                  between states
-                     + E[1/L] sum_c w_c f_c,g (1 - f_c,g)          counting
-                     + (1 - E[1/L]) mu_g / Theta_g                 within-state spread
+            Var(y_g | c) = m_cg (1 - m_cg) E_c[1/L] + (1 - E_c[1/L]) m_cg / Theta_g
 
-        with mu_g = sum_c w_c f_c,g and L independent of the state.  Setting it
-        to the cells' measured Var(y_g) gives Theta_g in closed form; genes no
-        more variable than counting plus states get Theta_g = inf.  E[1/L] is
-        the cells' own mean inverse library size.  Store it on the summary
-        (``summ.gene_theta = summ.estimate_gene_theta(counts)``) to keep it
-        with ``save`` and have ``sample(estimator="spread")`` use it.
+        (m_cg the state's mean share, E_c[1/L] its cells' mean inverse library
+        size).  It is linear in 1/Theta_g; pooling the states, weighted by
+        n_c - 1 (the degrees of freedom of a state's variance, so the pooled sum
+        is every cell's squared deviation from its own state's mean), gives
+        Theta_g in closed form, inf where the cells are no
+        more variable than counting.  No between-state term enters.  Store it
+        on the summary (``summ.gene_theta = summ.estimate_gene_theta(counts)``)
+        to keep it with ``save`` and have ``sample(estimator="spread")`` use it.
         """
         cnts = counts.tocsc() if sp.issparse(counts) else np.asarray(counts)
         if cnts.shape[1] != self.n_cells:
             raise ValueError(f"counts has {cnts.shape[1]} cells, the summary {self.n_cells}")
-        L = np.asarray(cnts.sum(axis=0), dtype=np.float64).ravel()
+        L = np.maximum(np.asarray(cnts.sum(axis=0), dtype=np.float64).ravel(), 1.0)
+        onehot = sp.csr_matrix(
+            (np.ones(self.n_cells), (np.arange(self.n_cells), self.labels)),
+            shape=(self.n_cells, self.n_states),
+        )
         if sp.issparse(cnts):
-            y = cnts @ sp.diags(1.0 / np.maximum(L, 1.0))
-            m = np.asarray(y.mean(axis=1)).ravel()
-            m2 = np.asarray(y.multiply(y).mean(axis=1)).ravel()
+            y = (cnts @ sp.diags(1.0 / L)).tocsr()
+            sum_y = np.asarray((y @ onehot).todense()).T
+            sum_y2 = np.asarray((y.multiply(y) @ onehot).todense()).T
         else:
-            y = cnts / np.maximum(L, 1.0)[None, :]
-            m, m2 = y.mean(axis=1), (y**2).mean(axis=1)
-        n = cnts.shape[1]
-        var = (m2 - m**2) * n / (n - 1)
-        return self.gene_theta_from_moments(var, float(np.mean(1.0 / np.maximum(L, 1.0))))
+            y = cnts / L[None, :]
+            sum_y, sum_y2 = (y @ onehot).T, ((y**2) @ onehot).T
+        n = np.bincount(self.labels, minlength=self.n_states).astype(np.float64)
+        sum_inv_l = np.bincount(self.labels, weights=1.0 / L, minlength=self.n_states)
+        return self.gene_theta_from_moments(n, sum_inv_l, np.asarray(sum_y), np.asarray(sum_y2))
 
-    def gene_theta_from_moments(self, share_var, mean_inv_depth) -> np.ndarray:
-        """``estimate_gene_theta`` from precomputed moments of the fitted cells,
-        for populations too large to hold at once: ``share_var`` the (G,)
-        variance across cells of y_g = x_g / L, ``mean_inv_depth`` the cells'
-        mean of 1/L.  Both accumulate block by block (sums of y, y^2 and 1/L)."""
-        var = np.asarray(share_var, dtype=np.float64)
-        f = self.freq("mean")  # (K, G)
-        w = self.weights
-        mu = w @ f
-        between = w @ (f - mu) ** 2
-        counting = w @ (f * (1.0 - f))
-        inv_l = float(mean_inv_depth)
-        excess = var - between - inv_l * counting
-        out = np.full(f.shape[1], np.inf)
-        pos = excess > 0
-        out[pos] = (1.0 - inv_l) * mu[pos] / excess[pos]
+    @staticmethod
+    def gene_theta_from_moments(n, sum_inv_l, sum_y, sum_y2) -> np.ndarray:
+        """``estimate_gene_theta`` from per-state sums over the fitted cells, for
+        populations too large to hold at once (they accumulate block by block):
+        ``n`` (K,) cells per state, ``sum_inv_l`` (K,) sums of 1/L, ``sum_y`` and
+        ``sum_y2`` (K, G) sums of y = x / L and of y^2.  States with fewer than
+        two cells carry no within-state information and are skipped."""
+        n = np.asarray(n, dtype=np.float64)
+        keep = n >= 2
+        n, e = n[keep][:, None], (np.asarray(sum_inv_l, dtype=np.float64)[keep] / n[keep])[:, None]
+        m = np.asarray(sum_y, dtype=np.float64)[keep] / n
+        var = (np.asarray(sum_y2, dtype=np.float64)[keep] / n - m**2) * n / (n - 1)
+        num = ((n - 1) * (1.0 - e) * m).sum(axis=0)
+        den = ((n - 1) * (var - m * (1.0 - m) * e)).sum(axis=0)
+        out = np.full(m.shape[1], np.inf)
+        pos = den > 0
+        out[pos] = num[pos] / den[pos]
         return out
 
     @property

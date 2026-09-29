@@ -334,10 +334,15 @@ def test_gene_theta_from_block_moments():
     s, d = _spread_population(np.full(300, 200.0), rng, N=900)
     L = d.sum(0).astype(float)
     y = d / L
-    sy, sy2, n = np.zeros(300), np.zeros(300), 0
+    K = s.n_states
+    n, inv, sy, sy2 = np.zeros(K), np.zeros(K), np.zeros((K, 300)), np.zeros((K, 300))
     for lo in range(0, 900, 250):  # accumulated block by block, as for a large population
-        b = y[:, lo : lo + 250]
-        sy, sy2, n = sy + b.sum(1), sy2 + (b**2).sum(1), n + b.shape[1]
-    var = (sy2 / n - (sy / n) ** 2) * n / (n - 1)
-    est = s.gene_theta_from_moments(var, float(np.mean(1.0 / L)))
+        sl = slice(lo, lo + 250)
+        for c in range(K):
+            sel = s.labels[sl] == c
+            n[c] += sel.sum()
+            inv[c] += (1.0 / L[sl][sel]).sum()
+            sy[c] += y[:, sl][:, sel].sum(1)
+            sy2[c] += (y[:, sl][:, sel] ** 2).sum(1)
+    est = Summary.gene_theta_from_moments(n, inv, sy, sy2)
     assert np.allclose(est, s.estimate_gene_theta(d), equal_nan=True)

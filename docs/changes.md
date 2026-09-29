@@ -290,24 +290,27 @@ difference.
 
 `Summary.estimate_gene_theta(counts)` measures it on the cells the summary was fitted on,
 as a per-gene concentration $\Theta_g$ of a within-state spread (unrelated to
-the prior's $\Theta$). With $y = x/L$ a cell's share of gene $g$, $f_{cg}$ the
-state posterior means (eq. 20), $w_c$ the state weights and
-$\mu_g = \sum_c w_c f_{cg}$, the law of total variance over the cell's state,
-depth (independent of the state) and within-state spread gives, to first order
-in $f$,
+the prior's $\Theta$). $\Theta_g$ describes how cells vary within a state, so it
+is estimated from exactly that: each cell against its own state's mean, pooled
+over the states. With $y = x/L$ a cell's share of gene $g$, $m_{cg}$ its mean in
+state $c$ and $\mathbb{E}_c[1/L]$ the state's mean inverse library size, the law
+of total variance over the counting and the spread gives, to first order in the
+share,
 
 $$
-\operatorname{Var}(y_g) = \sum_c w_c (f_{cg} - \mu_g)^2
-+ \mathbb{E}[1/L] \sum_c w_c f_{cg}(1 - f_{cg})
-+ \big(1 - \mathbb{E}[1/L]\big)\,\frac{\mu_g}{\Theta_g},
+\operatorname{Var}(y_g \mid c) = m_{cg}(1 - m_{cg})\,\mathbb{E}_c[1/L] + \big(1 - \mathbb{E}_c[1/L]\big)\,\frac{m_{cg}}{\Theta_g}.
 $$
 
-between states, counting at the cell's depth, and the spread. It is linear in
-$1/\Theta_g$, so setting it to the cells' measured variance gives $\Theta_g$ in
-closed form; genes no more variable than counting plus states get
-$\Theta_g = \infty$, the paper's model. Only the variance of $y_g$ and the mean
-of $1/L$ over the cells enter, so for populations too large to hold at once
-`gene_theta_from_moments` takes them accumulated block by block.
+It is linear in $1/\Theta_g$, so pooling the states, weighted by $n_c - 1$, gives
+$\Theta_g$ in closed form ($n_c - 1$, a state variance's degrees of freedom, not the
+state's frequency: the pooled sum is then every cell's squared deviation from its own
+state's mean, and single-cell states, with no within-state information, drop out); genes no more variable than counting get
+$\Theta_g = \infty$, the paper's model. No between-state term enters, so the
+estimate does not depend on how the states' profiles are estimated. Only
+per-state sums of $y$, $y^2$ and $1/L$ enter, so for populations too large to
+hold at once `gene_theta_from_moments` takes them accumulated block by block.
+One $\Theta_g$ is shared by all states; the spread still differs between states
+through the state's mean.
 
 Stored in the summary's `gene_theta` field (kept by `save`/`load`; files without
 it load with `None`), it is used by `sample(estimator="spread")`, which draws each cell around its
