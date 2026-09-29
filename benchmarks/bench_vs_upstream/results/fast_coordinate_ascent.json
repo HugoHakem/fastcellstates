@@ -1,0 +1,10 @@
+{
+  "tool": "fastcellstates",
+  "config": "fast_coordinate_ascent",
+  "n_states": 26,
+  "n_singletons": 2,
+  "theta": 38206.3155758059,
+  "log_likelihood": -43383570.63411222,
+  "seconds": 3.3605590872466564,
+  "peak_rss_mb": 1201.44140625
+}

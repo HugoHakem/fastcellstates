@@ -33,12 +33,26 @@ CONFIGS = {
     "exact": lambda: fcs.PRESETS["exact"],
     "fast": lambda: fcs.PRESETS["fast"],
     "fast_res1": lambda: _fast_at(1.0),
+    "fast_log_search": lambda: _fast_theta("log_search"),
+    "fast_coordinate_ascent": lambda: _fast_theta("coordinate_ascent"),
+    "fast_doubling": lambda: _fast_theta("doubling"),
 }
 
 
 def _fast_at(resolution):
     cfg = copy.deepcopy(fcs.PRESETS["fast"])
     cfg.init.resolution = resolution
+    return cfg
+
+
+def _fast_theta(theta_method, theta_rounds=10):
+    """The `fast` preset with `theta_method` swapped and `theta_rounds` (the
+    shared max-evaluations cap across all three search strategies since
+    moves.py's theta-search unification) held equal, so the three are
+    compared at the same evaluation budget rather than each at its own
+    historical default."""
+    cfg = copy.deepcopy(fcs.PRESETS["fast"])
+    cfg.model = fcs.ModelCfg(theta_method=theta_method, theta_rounds=theta_rounds)
     return cfg
 
 
