@@ -305,7 +305,9 @@ $$
 between states, counting at the cell's depth, and the spread. It is linear in
 $1/\Theta_g$, so setting it to the cells' measured variance gives $\Theta_g$ in
 closed form; genes no more variable than counting plus states get
-$\Theta_g = \infty$, the paper's model.
+$\Theta_g = \infty$, the paper's model. Only the variance of $y_g$ and the mean
+of $1/L$ over the cells enter, so for populations too large to hold at once
+`gene_theta_from_moments` takes them accumulated block by block.
 
 Stored in the summary's `gene_theta` field (kept by `save`/`load`; files without
 it load with `None`), it is used by `sample(estimator="spread")`, which draws each cell around its

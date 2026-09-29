@@ -124,12 +124,20 @@ class Summary:
             m, m2 = y.mean(axis=1), (y**2).mean(axis=1)
         n = cnts.shape[1]
         var = (m2 - m**2) * n / (n - 1)
+        return self.gene_theta_from_moments(var, float(np.mean(1.0 / np.maximum(L, 1.0))))
+
+    def gene_theta_from_moments(self, share_var, mean_inv_depth) -> np.ndarray:
+        """``estimate_gene_theta`` from precomputed moments of the fitted cells,
+        for populations too large to hold at once: ``share_var`` the (G,)
+        variance across cells of y_g = x_g / L, ``mean_inv_depth`` the cells'
+        mean of 1/L.  Both accumulate block by block (sums of y, y^2 and 1/L)."""
+        var = np.asarray(share_var, dtype=np.float64)
         f = self.freq("mean")  # (K, G)
         w = self.weights
         mu = w @ f
         between = w @ (f - mu) ** 2
         counting = w @ (f * (1.0 - f))
-        inv_l = float(np.mean(1.0 / np.maximum(L, 1.0)))
+        inv_l = float(mean_inv_depth)
         excess = var - between - inv_l * counting
         out = np.full(f.shape[1], np.inf)
         pos = excess > 0
