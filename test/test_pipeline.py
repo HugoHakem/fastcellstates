@@ -243,3 +243,71 @@ def test_cli_run_and_config_roundtrip(tmp_path, capsys, synthetic):
     out2 = tmp_path / "replay"
     cli.main(["--config", str(cfg_file), "-o", str(out2)])
     assert Summary.load(out2 / "summary.npz").n_states == n_states
+
+
+def _spread_population(theta_gene, rng, G=300, N=4000, K=3, L=3000):
+    """Cells from K known states with a per-gene within-state spread, and the
+    Summary built from the true labels (no fit: tests the estimator alone)."""
+    phi = rng.dirichlet(np.full(G, 2.0))
+    f = rng.dirichlet(2000.0 * phi, size=K)
+    labels = rng.integers(0, K, N)
+    lib = rng.integers(L // 2, 2 * L, N)
+    d = np.zeros((G, N), dtype=np.int64)
+    for i in range(N):
+        g = (
+            f[labels[i]]
+            if np.isinf(theta_gene).all()
+            else rng.standard_gamma(theta_gene * f[labels[i]]) / theta_gene
+        )
+        d[:, i] = rng.multinomial(lib[i], g / g.sum())
+    counts = np.stack([d[:, labels == c].sum(1) for c in range(K)]).astype(np.float64)
+    s = Summary(
+        labels=labels,
+        counts=counts,
+        weights=np.bincount(labels, minlength=K) / N,
+        theta=1e-6,  # a vanishing prior: freq("mean") is the states' own profile
+        phi=phi,
+        lib_sizes=[lib[labels == c] for c in range(K)],
+    )
+    return s, d
+
+
+def test_gene_theta_recovers_within_state_spread():
+    rng = np.random.default_rng(3)
+    true = np.full(300, 200.0)
+    s, d = _spread_population(true, rng)
+    est = s.gene_theta(d)
+    expressed = s.freq("mean").mean(0) > 1e-3
+    ratio = est[expressed] / true[expressed]
+    assert np.isfinite(ratio).mean() > 0.95
+    assert 0.8 < np.median(ratio[np.isfinite(ratio)]) < 1.25
+
+
+def test_gene_theta_is_infinite_without_spread():
+    rng = np.random.default_rng(4)
+    s, d = _spread_population(np.full(300, np.inf), rng)
+    est = s.gene_theta(d)
+    # no spread: Theta_g is inf, or so large the spread term is negligible
+    assert np.median(np.where(np.isinf(est), 1e12, est)) > 1e5
+
+
+def test_sample_spread_and_log_shift():
+    rng = np.random.default_rng(5)
+    s, d = _spread_population(np.full(300, 200.0), rng, N=1000)
+    tg = s.gene_theta(d)
+    x = s.sample(2000, rng=0, estimator="spread", gene_theta=tg)
+    assert x.shape == (300, 2000) and x.dtype == np.int64
+    # the sampled cells' mean share tracks the states' mixture profile
+    mix = s.weights @ s.freq("mean")
+    share = (x / x.sum(0)).mean(1)
+    top = mix > 1e-2
+    assert np.allclose(share[top], mix[top], rtol=0.1)
+    # a log-shift doubles one gene's share (relative to the rest), in every state
+    shift = np.zeros(300)
+    j = int(np.argmax(mix))
+    shift[j] = np.log(2.0)
+    xs = s.sample(2000, rng=0, estimator="spread", gene_theta=tg, log_shift=shift)
+    ratio = (xs[j] / xs.sum(0)).mean() / share[j]
+    assert 1.6 < ratio < 2.2
+    with pytest.raises(ValueError):
+        s.sample(10, rng=0, estimator="spread")

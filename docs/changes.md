@@ -277,6 +277,51 @@ Overall this method would be much more principled / theoretically grounded, but 
 
 Full write-up and code [`experiment/sanity-knn`](https://github.com/HugoHakem/fastcellstates/tree/experiment/sanity-knn).
 
+## Beyond the paper: a per-gene within-state spread
+
+The model treats every cell of a state as a multinomial draw of the state's one
+frequency vector: all variation between cells of a state is counting noise.
+That is what makes the partition well defined, and the fit does not change here.
+But when the `Summary` is used generatively, real cells turn out to vary more
+than that within a state, by an amount that differs by gene: bursty genes and
+genes marking a state's substructure more. Cells sampled without it are too
+uniform, and a differential-expression test against real cells picks up the
+difference.
+
+`Summary.gene_theta(counts)` measures it on the cells the summary was fitted on,
+as a per-gene concentration $\Theta_g$ of a within-state spread (unrelated to
+the prior's $\Theta$). With $y = x/L$ a cell's share of gene $g$, $f_{cg}$ the
+state posterior means (eq. 20), $w_c$ the state weights and
+$\mu_g = \sum_c w_c f_{cg}$, the law of total variance over the cell's state,
+depth (independent of the state) and within-state spread gives, to first order
+in $f$,
+
+$$
+\operatorname{Var}(y_g) = \sum_c w_c (f_{cg} - \mu_g)^2
++ \mathbb{E}[1/L] \sum_c w_c f_{cg}(1 - f_{cg})
++ \big(1 - \mathbb{E}[1/L]\big)\,\frac{\mu_g}{\Theta_g},
+$$
+
+between states, counting at the cell's depth, and the spread. It is linear in
+$1/\Theta_g$, so setting it to the cells' measured variance gives $\Theta_g$ in
+closed form; genes no more variable than counting plus states get
+$\Theta_g = \infty$, the paper's model.
+
+`sample(estimator="spread", gene_theta=...)` then draws each cell around its
+state's posterior mean with that spread,
+
+$$
+G_g \sim \mathrm{Gamma}(\Theta_g f_{cg},\ 1/\Theta_g), \qquad
+\alpha = G / \textstyle\sum_{g'} G_{g'}, \qquad
+x \sim \mathrm{Multinomial}(L, \alpha),
+$$
+
+so $\alpha_g$ has mean $f_{cg}$ and, to first order, variance $f_{cg}/\Theta_g$.
+With different $\Theta_g$ across genes this is not a Dirichlet; with one shared
+value it is. `log_shift` (any estimator) applies a log-fold change to every
+state's frequencies before the draw, for sampling a perturbed version of the
+same population.
+
 ## A note on single-cell states
 
 The paper argues that the many singlet cell-states the model finds reflect

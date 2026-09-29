@@ -11,6 +11,19 @@ place held-out cells, all without re-running anything.
 a fresh alpha per sampled cell (``Summary.sample``'s default): the proper
 posterior predictive, not the plug-in posterior mean
 ``f_c,g = (Theta*phi_g + C_c,g) / (Theta + N_c)``.
+
+Beyond the paper (``gene_theta`` and ``sample(estimator="spread")``): cellstates
+treats every cell of a state as a multinomial draw of the state's one profile, so
+all variation between them is counting noise.  Real cells vary more, and by an
+amount that differs by gene.  ``gene_theta`` measures it as a per-gene
+concentration Theta_g of a within-state spread (unrelated to the prior's Theta),
+and ``sample(estimator="spread")`` draws cells with it:
+
+    G_g ~ Gamma(Theta_g * f_c,g, scale 1/Theta_g),   alpha = G / sum(G)
+    cell in state c, library size L   ~   Multinomial(L, alpha)
+
+so alpha_g has mean f_c,g and, to first order in f, variance f_c,g / Theta_g;
+Theta_g = inf is the paper's model.  The partition is fitted exactly as before.
 """
 
 from dataclasses import dataclass
@@ -72,6 +85,50 @@ class Summary:
         """(K, G) posterior frequency vector per state."""
         return self.model.posterior_freq(self.counts, kind=kind)
 
+    def gene_theta(self, counts) -> np.ndarray:
+        """(G,) per-gene within-state concentration Theta_g, by moments on the
+        fitted cells (beyond the paper; see the module docstring).
+
+        ``counts``: the (G, N) cells this summary was fitted on, in the same
+        order as ``labels``.  With y = x / L a cell's share of gene g, the
+        state posterior means f_c,g (``freq("mean")``) and weights w_c, the
+        law of total variance over state, depth and the within-state spread
+        gives, to first order in f,
+
+            Var(y_g) = sum_c w_c (f_c,g - mu_g)^2                  between states
+                     + E[1/L] sum_c w_c f_c,g (1 - f_c,g)          counting
+                     + (1 - E[1/L]) mu_g / Theta_g                 within-state spread
+
+        with mu_g = sum_c w_c f_c,g and L independent of the state.  Setting it
+        to the cells' measured Var(y_g) gives Theta_g in closed form; genes no
+        more variable than counting plus states get Theta_g = inf.  E[1/L] is
+        the cells' own mean inverse library size.
+        """
+        cnts = counts.tocsc() if sp.issparse(counts) else np.asarray(counts)
+        if cnts.shape[1] != self.n_cells:
+            raise ValueError(f"counts has {cnts.shape[1]} cells, the summary {self.n_cells}")
+        L = np.asarray(cnts.sum(axis=0), dtype=np.float64).ravel()
+        if sp.issparse(cnts):
+            y = cnts @ sp.diags(1.0 / np.maximum(L, 1.0))
+            m = np.asarray(y.mean(axis=1)).ravel()
+            m2 = np.asarray(y.multiply(y).mean(axis=1)).ravel()
+        else:
+            y = cnts / np.maximum(L, 1.0)[None, :]
+            m, m2 = y.mean(axis=1), (y**2).mean(axis=1)
+        n = cnts.shape[1]
+        var = (m2 - m**2) * n / (n - 1)
+        f = self.freq("mean")  # (K, G)
+        w = self.weights
+        mu = w @ f
+        between = w @ (f - mu) ** 2
+        counting = w @ (f * (1.0 - f))
+        inv_l = float(np.mean(1.0 / np.maximum(L, 1.0)))
+        excess = var - between - inv_l * counting
+        out = np.full(f.shape[1], np.inf)
+        pos = excess > 0
+        out[pos] = (1.0 - inv_l) * mu[pos] / excess[pos]
+        return out
+
     @property
     def log_likelihood(self):
         """Total DM marginal log-likelihood of the partition: the sum of the
@@ -86,7 +143,16 @@ class Summary:
     # generative use
     # ------------------------------------------------------------------ #
 
-    def sample(self, n_cells, rng=None, states=None, lib_sizes=None, estimator="posterior"):
+    def sample(
+        self,
+        n_cells,
+        rng=None,
+        states=None,
+        lib_sizes=None,
+        estimator="posterior",
+        gene_theta=None,
+        log_shift=None,
+    ):
         """Draw ``n_cells`` new cells.  Returns (G, n_cells) int counts.
 
         states     : draw state labels from ``weights`` (default) or use these.
@@ -106,6 +172,15 @@ class Summary:
                      exactly 0), so its draws are typically even less spread
                      than "mean"'s.  Both plug-ins make generated cells
                      visibly tighter than real ones, e.g. in a UMAP.
+                     "spread" (beyond the paper): each cell drawn around the
+                     state's posterior mean with a per-gene within-state
+                     spread, ``gene_theta`` (required; e.g. from
+                     ``Summary.gene_theta``), see the module docstring.
+                     Drawn a state at a time.
+        gene_theta : (G,) per-gene concentrations for "spread" (inf = no spread).
+        log_shift  : (G,) optional log-fold change applied to every state's
+                     frequencies before the draw, alpha -> normalize(alpha *
+                     exp(log_shift)): the same population, perturbed.
         """
         rng = np.random.default_rng(rng)
         if states is None:
@@ -113,17 +188,44 @@ class Summary:
         states = np.asarray(states)
         if lib_sizes is None:
             lib_sizes = np.array([rng.choice(self.lib_sizes[c]) for c in states])
+        lib_sizes = np.asarray(lib_sizes)
         out = np.zeros((self.counts.shape[1], n_cells), dtype=np.int64)
+        shift = None if log_shift is None else np.exp(np.asarray(log_shift, dtype=np.float64))
+
+        def shifted(a):
+            if shift is None:
+                return a
+            a = a * shift
+            return a / a.sum(axis=-1, keepdims=True)
+
+        if estimator == "spread":
+            if gene_theta is None:
+                raise ValueError('estimator="spread" needs gene_theta')
+            tg = np.asarray(gene_theta, dtype=np.float64)
+            fin = np.isfinite(tg)
+            f = shifted(self.freq("mean"))
+            for c in np.unique(states):
+                cells = np.flatnonzero(states == c)
+                g = np.repeat(f[c][None, :], len(cells), axis=0)
+                g[:, fin] = (
+                    rng.standard_gamma(tg[fin] * f[c, fin], size=(len(cells), int(fin.sum())))
+                    / tg[fin]
+                )
+                g /= g.sum(axis=1, keepdims=True)
+                out[:, cells] = rng.multinomial(np.asarray(lib_sizes[cells], dtype=np.int64), g).T
+            return out
         if estimator == "posterior":
             a = self.model.posterior_params(self.counts)  # (K, G)
             for j in range(n_cells):
-                out[:, j] = rng.multinomial(int(lib_sizes[j]), rng.dirichlet(a[states[j]]))
+                out[:, j] = rng.multinomial(int(lib_sizes[j]), shifted(rng.dirichlet(a[states[j]])))
         elif estimator in ("mean", "mode"):
-            f = self.freq(estimator)
+            f = shifted(self.freq(estimator))
             for j in range(n_cells):
                 out[:, j] = rng.multinomial(int(lib_sizes[j]), f[states[j]])
         else:
-            raise ValueError(f"estimator must be 'posterior', 'mean', or 'mode', got {estimator!r}")
+            raise ValueError(
+                f"estimator must be 'posterior', 'mean', 'mode' or 'spread', got {estimator!r}"
+            )
         return out
 
     def reconstruct(self, counts, rng=None, estimator="posterior"):
