@@ -276,7 +276,7 @@ def test_gene_theta_recovers_within_state_spread():
     rng = np.random.default_rng(3)
     true = np.full(300, 200.0)
     s, d = _spread_population(true, rng)
-    est = s.gene_theta(d)
+    est = s.estimate_gene_theta(d)
     expressed = s.freq("mean").mean(0) > 1e-3
     ratio = est[expressed] / true[expressed]
     assert np.isfinite(ratio).mean() > 0.95
@@ -286,7 +286,7 @@ def test_gene_theta_recovers_within_state_spread():
 def test_gene_theta_is_infinite_without_spread():
     rng = np.random.default_rng(4)
     s, d = _spread_population(np.full(300, np.inf), rng)
-    est = s.gene_theta(d)
+    est = s.estimate_gene_theta(d)
     # no spread: Theta_g is inf, or so large the spread term is negligible
     assert np.median(np.where(np.isinf(est), 1e12, est)) > 1e5
 
@@ -294,7 +294,7 @@ def test_gene_theta_is_infinite_without_spread():
 def test_sample_spread_and_log_shift():
     rng = np.random.default_rng(5)
     s, d = _spread_population(np.full(300, 200.0), rng, N=1000)
-    tg = s.gene_theta(d)
+    tg = s.estimate_gene_theta(d)
     x = s.sample(2000, rng=0, estimator="spread", gene_theta=tg)
     assert x.shape == (300, 2000) and x.dtype == np.int64
     # the sampled cells' mean share tracks the states' mixture profile
@@ -311,3 +311,19 @@ def test_sample_spread_and_log_shift():
     assert 1.6 < ratio < 2.2
     with pytest.raises(ValueError):
         s.sample(10, rng=0, estimator="spread")
+
+
+def test_gene_theta_saved_and_used(tmp_path):
+    rng = np.random.default_rng(6)
+    s, d = _spread_population(np.full(300, 200.0), rng, N=600)
+    p = tmp_path / "s.npz"
+    s.save(p)
+    assert Summary.load(p).gene_theta is None  # older files and unset summaries load as before
+    s.gene_theta = s.estimate_gene_theta(d)
+    s.save(p)
+    r = Summary.load(p)
+    assert np.array_equal(r.gene_theta, s.gene_theta)
+    # "spread" uses the stored value when none is passed
+    a = r.sample(200, rng=0, estimator="spread")
+    b = r.sample(200, rng=0, estimator="spread", gene_theta=s.gene_theta)
+    assert np.array_equal(a, b)

@@ -288,7 +288,7 @@ genes marking a state's substructure more. Cells sampled without it are too
 uniform, and a differential-expression test against real cells picks up the
 difference.
 
-`Summary.gene_theta(counts)` measures it on the cells the summary was fitted on,
+`Summary.estimate_gene_theta(counts)` measures it on the cells the summary was fitted on,
 as a per-gene concentration $\Theta_g$ of a within-state spread (unrelated to
 the prior's $\Theta$). With $y = x/L$ a cell's share of gene $g$, $f_{cg}$ the
 state posterior means (eq. 20), $w_c$ the state weights and
@@ -307,7 +307,8 @@ $1/\Theta_g$, so setting it to the cells' measured variance gives $\Theta_g$ in
 closed form; genes no more variable than counting plus states get
 $\Theta_g = \infty$, the paper's model.
 
-`sample(estimator="spread", gene_theta=...)` then draws each cell around its
+Stored in the summary's `gene_theta` field (kept by `save`/`load`; files without
+it load with `None`), it is used by `sample(estimator="spread")`, which draws each cell around its
 state's posterior mean with that spread,
 
 $$

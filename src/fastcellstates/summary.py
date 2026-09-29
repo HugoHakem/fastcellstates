@@ -12,10 +12,11 @@ a fresh alpha per sampled cell (``Summary.sample``'s default): the proper
 posterior predictive, not the plug-in posterior mean
 ``f_c,g = (Theta*phi_g + C_c,g) / (Theta + N_c)``.
 
-Beyond the paper (``gene_theta`` and ``sample(estimator="spread")``): cellstates
+Beyond the paper (``estimate_gene_theta``, the ``gene_theta`` field and
+``sample(estimator="spread")``): cellstates
 treats every cell of a state as a multinomial draw of the state's one profile, so
 all variation between them is counting noise.  Real cells vary more, and by an
-amount that differs by gene.  ``gene_theta`` measures it as a per-gene
+amount that differs by gene.  ``estimate_gene_theta`` measures it as a per-gene
 concentration Theta_g of a within-state spread (unrelated to the prior's Theta),
 and ``sample(estimator="spread")`` draws cells with it:
 
@@ -65,6 +66,10 @@ class Summary:
     genes: np.ndarray | None = None
     """(G,) gene names in ``counts``' column order, if given to ``run()``;
     ``None`` otherwise."""
+    gene_theta: np.ndarray | None = None
+    """(G,) per-gene within-state concentration (beyond the paper; see the
+    module docstring), set from ``estimate_gene_theta`` and used by
+    ``sample(estimator="spread")``; ``None`` until estimated."""
 
     # ------------------------------------------------------------------ #
 
@@ -85,7 +90,7 @@ class Summary:
         """(K, G) posterior frequency vector per state."""
         return self.model.posterior_freq(self.counts, kind=kind)
 
-    def gene_theta(self, counts) -> np.ndarray:
+    def estimate_gene_theta(self, counts) -> np.ndarray:
         """(G,) per-gene within-state concentration Theta_g, by moments on the
         fitted cells (beyond the paper; see the module docstring).
 
@@ -102,7 +107,9 @@ class Summary:
         with mu_g = sum_c w_c f_c,g and L independent of the state.  Setting it
         to the cells' measured Var(y_g) gives Theta_g in closed form; genes no
         more variable than counting plus states get Theta_g = inf.  E[1/L] is
-        the cells' own mean inverse library size.
+        the cells' own mean inverse library size.  Store it on the summary
+        (``summ.gene_theta = summ.estimate_gene_theta(counts)``) to keep it
+        with ``save`` and have ``sample(estimator="spread")`` use it.
         """
         cnts = counts.tocsc() if sp.issparse(counts) else np.asarray(counts)
         if cnts.shape[1] != self.n_cells:
@@ -174,10 +181,11 @@ class Summary:
                      visibly tighter than real ones, e.g. in a UMAP.
                      "spread" (beyond the paper): each cell drawn around the
                      state's posterior mean with a per-gene within-state
-                     spread, ``gene_theta`` (required; e.g. from
-                     ``Summary.gene_theta``), see the module docstring.
+                     spread, ``gene_theta`` (default: the summary's own
+                     ``gene_theta`` field), see the module docstring.
                      Drawn a state at a time.
-        gene_theta : (G,) per-gene concentrations for "spread" (inf = no spread).
+        gene_theta : (G,) per-gene concentrations for "spread" (inf = no spread);
+                     default the ``gene_theta`` field.
         log_shift  : (G,) optional log-fold change applied to every state's
                      frequencies before the draw, alpha -> normalize(alpha *
                      exp(log_shift)): the same population, perturbed.
@@ -200,7 +208,11 @@ class Summary:
 
         if estimator == "spread":
             if gene_theta is None:
-                raise ValueError('estimator="spread" needs gene_theta')
+                gene_theta = self.gene_theta
+            if gene_theta is None:
+                raise ValueError(
+                    'estimator="spread" needs gene_theta (pass it, or set it from estimate_gene_theta)'
+                )
             tg = np.asarray(gene_theta, dtype=np.float64)
             fin = np.isfinite(tg)
             f = shifted(self.freq("mean"))
@@ -323,12 +335,14 @@ class Summary:
             phi=self.phi,
             lib_sizes=np.array(self.lib_sizes, dtype=object),
             genes=np.array([]) if self.genes is None else self.genes,
+            gene_theta=np.array([]) if self.gene_theta is None else self.gene_theta,
         )
 
     @classmethod
     def load(cls, path):
         z = np.load(path, allow_pickle=True)
         g = z["genes"]
+        tg = z["gene_theta"] if "gene_theta" in z.files else np.array([])  # absent from older files
         return cls(
             labels=z["labels"],
             counts=z["counts"],
@@ -337,4 +351,5 @@ class Summary:
             phi=z["phi"],
             lib_sizes=list(z["lib_sizes"]),
             genes=None if g.size == 0 else g,
+            gene_theta=None if tg.size == 0 else tg,
         )

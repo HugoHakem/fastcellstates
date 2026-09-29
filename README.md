@@ -253,8 +253,8 @@ summ.freq()                                 # (K, G) per-state frequency vectors
 summ.sample(1000)                           # (G, 1000) freshly drawn cells
 summ.reconstruct(counts)                    # resample the input at its own depths
 summ.predict_state(new_counts)              # place held-out cells
-theta_g = summ.gene_theta(counts)           # per-gene within-state spread (beyond the paper)
-summ.sample(1000, estimator="spread", gene_theta=theta_g)   # cells with that spread
+summ.gene_theta = summ.estimate_gene_theta(counts)   # per-gene within-state spread (beyond the paper), kept by save()
+summ.sample(1000, estimator="spread")       # cells with that spread
 summ.sample(1000, log_shift=delta)          # the same population, every state shifted by a log-fold change
 summ.hierarchy(); summ.cut(10); summ.markers()   # lazy, from the K count vectors
 summ.save("out/summary.npz")
@@ -290,7 +290,8 @@ The `ete3` renderer additionally needs conda-forge `ete3` (its PyPI build is bro
   reference (`fastcellstates.model._dm_reference`) and a frozen Cython golden file;
 - `test_blocks.py`: `partition`, `model` (Minka θ fit, posteriors), `moves`;
 - `test_pipeline.py`: end-to-end `fast`/`exact`, `Summary` round-trips, and the
-  within-state spread (`gene_theta` recovered on simulated cells, `"spread"` sampling, `log_shift`).
+  within-state spread (`estimate_gene_theta` recovered on simulated cells, saved and loaded,
+  `"spread"` sampling, `log_shift`).
 
 `pixi run lint`: ruff + mypy.
 
